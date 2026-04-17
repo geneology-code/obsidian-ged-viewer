@@ -1,0 +1,10 @@
+{
+	"id": "ged-viewer",
+	"name": "GED Viewer",
+	"version": "1.0",
+	"minAppVersion": "0.15.0",
+	"description": "Display genealogical data from GEDCOM files in Obsidian notes",
+	"author": "geneology-code",
+	"authorUrl": "https://github.com/geneology-code/obsidian-ged-viewer",
+	"isDesktopOnly": false
+}

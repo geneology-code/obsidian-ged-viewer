@@ -174,14 +174,15 @@
   },
   "left-ribbon": {
     "hiddenItems": {
+      "ged-viewer:Открыть поиск GEDCOM": false,
+      "obsidian42-brat:BRAT": false,
       "switcher:Меню быстрого перехода": false,
       "graph:Граф": false,
       "canvas:Создать новый холст": false,
       "daily-notes:Сегодняшняя заметка": false,
       "templates:Вставить шаблон": false,
       "command-palette:Открыть палитру команд": false,
-      "bases:Создать новую базу": false,
-      "obsidian-gedcom-plugin:Открыть поиск GEDCOM": false
+      "bases:Создать новую базу": false
     }
   },
   "active": "147c44ee9c614fdb",
