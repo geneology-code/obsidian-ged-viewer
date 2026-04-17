@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build plugin
+        run: npm run build
+
+      - name: Copy files to showcase
+        run: |
+          mkdir -p obsidian-gedcom-test/.obsidian/plugins/ged-viewer/
+          cp main.js obsidian-gedcom-test/.obsidian/plugins/ged-viewer/
+          cp manifest.json obsidian-gedcom-test/.obsidian/plugins/ged-viewer/
+          cp styles.css obsidian-gedcom-test/.obsidian/plugins/ged-viewer/
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: |
+            main.js
+            manifest.json
+            styles.css
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

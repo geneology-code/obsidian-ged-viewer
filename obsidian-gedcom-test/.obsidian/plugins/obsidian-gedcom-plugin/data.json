@@ -1,0 +1,7 @@
+{
+  "gedcomFilePath": "royal.ged",
+  "maxLifespanYears": 100,
+  "enableDebugLogging": false,
+  "defaultDiagramGenerations": 3,
+  "enableGedJS": true
+}

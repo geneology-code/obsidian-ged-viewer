@@ -1,0 +1,40 @@
+{
+  "name": "ged-viewer",
+  "version": "1.0.0",
+  "description": "An Obsidian plugin for displaying genealogical data from GEDCOM files",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "version": "node scripts/version-bump.mjs && git add manifest.json versions.json"
+  },
+  "keywords": [
+    "obsidian",
+    "genealogy",
+    "gedcom",
+    "family tree"
+  ],
+  "author": "geneology-code",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/d3-array": "^3.2.2",
+    "@types/d3-hierarchy": "^3.1.7",
+    "@types/d3-selection": "^3.0.11",
+    "@types/d3-transition": "^3.0.9",
+    "@types/d3-zoom": "^3.0.8",
+    "@types/node": "^16.11.6",
+    "@typescript-eslint/eslint-plugin": "5.29.0",
+    "@typescript-eslint/parser": "5.29.0",
+    "builtin-modules": "3.3.0",
+    "esbuild": "0.17.3",
+    "obsidian": "latest",
+    "tslib": "2.4.0",
+    "typescript": "4.7.4"
+  },
+  "dependencies": {
+    "chronos-timeline-md": "^1.1.0",
+    "d3": "^7.8.5",
+    "read-gedcom": "^0.3.2",
+    "topola": "^3.9.0"
+  }
+}

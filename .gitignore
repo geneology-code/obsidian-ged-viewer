@@ -1,0 +1,10 @@
+linked_ts/
+!linked_ts/obsidian-plugin-chronos
+linked
+node_modules/
+obsidian-gedcom-test/main_genealogy.ged
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

@@ -1,0 +1,10 @@
+{
+	"id": "obsidian-gedcom-plugin",
+	"name": "GEDCOM Genealogy",
+	"version": "1.6.0",
+	"minAppVersion": "0.15.0",
+	"description": "Display genealogical data from GEDCOM files in Obsidian notes",
+	"author": "Your Name",
+	"authorUrl": "",
+	"isDesktopOnly": false
+}
