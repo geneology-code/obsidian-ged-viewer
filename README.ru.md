@@ -26,13 +26,7 @@
 
 ## Настройка
 
-В настройках плагина укажите путь к GEDCOM-файлу(ам):
-
-- Для одного файла: `path/to/my-family.ged`
-- Для нескольких файлов: `path/to/file1.ged, path/to/file2.ged` или `path/to/file1.ged path/to/file2.ged`
-- Также можно назначить алиасы: `path/to/file1.ged::My Family Tree`
-
-Включите "Reload on startup" для автоматической загрузки GEDCOM данных при запуске Obsidian.
+В настройках плагина укажите путь к GEDCOM-файлу(ам): `path/to/my-family.ged`
 
 ### Настройки
 

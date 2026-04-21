@@ -26,13 +26,8 @@ This plugin allows you to integrate genealogical data from GEDCOM files directly
 
 ## Configuration
 
-In the plugin settings, specify the path to your GEDCOM file(s):
+In the plugin settings, specify the path to your GEDCOM file(s): `path/to/my-family.ged`
 
-- For a single file: `path/to/my-family.ged`
-- For multiple files: `path/to/file1.ged, path/to/file2.ged` or `path/to/file1.ged path/to/file2.ged`
-- You can also assign aliases: `path/to/file1.ged::My Family Tree`
-
-Enable "Reload on startup" to automatically load your GEDCOM data when Obsidian starts.
 
 ### Settings
 
