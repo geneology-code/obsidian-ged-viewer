@@ -4,6 +4,7 @@ import { GedcomPersonRenderer, GedcomFamilyRenderer, GedcomPersonEventsRenderer,
 import { GedChronosRenderer } from './ChronosRenderChild';
 import { GedcomJSRenderer } from './GedcomJSRenderer';
 import { createTopolaRenderer } from './TopolaRenderer';
+import { GenResearchRenderChild } from './GenResearchRenderChild';
 
 /**
  * Render the ged-person block
@@ -154,6 +155,22 @@ export async function renderDiagramRelativesBlock(
     defaultGenerations: number = 3
 ): Promise<void> {
     createTopolaRenderer(source, el, ctx, gedcomService, 'relatives', defaultGenerations);
+}
+
+/**
+ * Render the gen-research block — research dashboard for frontier ancestors
+ */
+export async function renderGenResearchBlock(
+    source: string,
+    el: HTMLElement,
+    ctx: MarkdownPostProcessorContext,
+    gedcomService: GedcomService,
+    app: App,
+    maxLifespanYears: number
+): Promise<void> {
+    const renderer = new GenResearchRenderChild(el, source, gedcomService, ctx, app, maxLifespanYears);
+    ctx.addChild(renderer);
+    await renderer.render();
 }
 
 /**

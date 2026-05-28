@@ -12,9 +12,13 @@ import {
     renderDiagramAncestorsBlock,
     renderDiagramDescendantsBlock,
     renderDiagramHourglassBlock,
-    renderDiagramRelativesBlock
+    renderDiagramRelativesBlock,
+    renderGenResearchBlock
 } from './blocks';
 import { GEDCOM_SEARCH_VIEW, GedcomSearchView } from './views/GedcomSearchView';
+import { GEN_RESEARCH_VIEW, GenResearchView } from './views/GenResearchView';
+import { parseOverlay, serializeOverlay } from './research/overlayParser';
+import { OverlayState, DEFAULT_UI_STATE } from './research/types';
 import { PersonListModal } from './commands/personList';
 import { registerInsertCommands } from './commands/insertBlocks';
 import { GEDCOMPluginSettings, DEFAULT_SETTINGS } from './types/settings';
@@ -26,6 +30,7 @@ const FAMILY_SEARCH_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0
 export default class GEDCOMPlugin extends Plugin {
 	settings: GEDCOMPluginSettings;
 	gedcomService: GedcomService;
+	private researchViewOverlay: OverlayState = { ui: { ...DEFAULT_UI_STATE, expandedIds: [] }, persons: {} };
 
 	async onload() {
 		await this.loadSettings();
@@ -46,15 +51,28 @@ export default class GEDCOMPlugin extends Plugin {
 		// Initialize core service
 		this.gedcomService = new GedcomService(this.app);
 
-		// Register view type
+		// Register view types
 		this.registerView(GEDCOM_SEARCH_VIEW, (leaf) => new GedcomSearchView(leaf, this.gedcomService));
+		this.registerView(GEN_RESEARCH_VIEW, (leaf) => new GenResearchView(
+			leaf,
+			this.gedcomService,
+			() => this.settings.maxLifespanYears,
+			() => this.researchViewOverlay,
+			async (state) => {
+				this.researchViewOverlay = state;
+				await this.saveData({ ...this.settings, _researchOverlay: serializeOverlay(state) });
+			}
+		));
 
 		// Register custom ribbon icon
 		addIcon('family-search', FAMILY_SEARCH_ICON);
 
-		// Register ribbon icon
+		// Ribbon icons
 		this.addRibbonIcon('family-search', t('search.openView') || 'GEDCOM Search', () => {
 			this.activateView();
+		});
+		this.addRibbonIcon('telescope', t('research.openView') || 'Research Dashboard', () => {
+			this.activateResearchView();
 		});
 
 		// Register code blocks
@@ -103,6 +121,10 @@ export default class GEDCOMPlugin extends Plugin {
 			await renderDiagramRelativesBlock(source, el, ctx, this.gedcomService, this.settings.defaultDiagramGenerations);
 		});
 
+		this.registerMarkdownCodeBlockProcessor('gen-research', async (source, el, ctx) => {
+			await renderGenResearchBlock(source, el, ctx, this.gedcomService, this.app, this.settings.maxLifespanYears);
+		});
+
 		this.registerMarkdownCodeBlockProcessor('ged-js', async (source, el, ctx) => {
 			if (!this.settings.enableGedJS) {
 				el.createEl('p', { text: 'ged-js blocks are disabled. Enable them in GEDCOM plugin settings.' });
@@ -131,22 +153,37 @@ export default class GEDCOMPlugin extends Plugin {
 	}
 
 	onunload() {
-		// Refresh views on unload to clean up
 		this.app.workspace.updateOptions();
-		// Detach all leaves of our view
 		this.app.workspace.detachLeavesOfType(GEDCOM_SEARCH_VIEW);
+		this.app.workspace.detachLeavesOfType(GEN_RESEARCH_VIEW);
 	}
 
 	async loadSettings() {
 		const savedData = await this.loadData();
 		console.log('[GEDCOM Plugin] loadSettings: savedData=', savedData);
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, savedData);
+		const { _researchOverlay, ...settingsData } = savedData || {};
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, settingsData);
+		if (_researchOverlay) {
+			this.researchViewOverlay = parseOverlay(_researchOverlay);
+		}
 		console.log('[GEDCOM Plugin] loadSettings: this.settings=', this.settings);
 	}
 
 	async saveSettings() {
 		console.log('[GEDCOM Plugin] saveSettings: saving this.settings=', this.settings);
 		await this.saveData(this.settings);
+	}
+
+	private async activateResearchView() {
+		const leaves = this.app.workspace.getLeavesOfType(GEN_RESEARCH_VIEW);
+		if (leaves.length > 0) {
+			await this.app.workspace.revealLeaf(leaves[0]);
+			return;
+		}
+		const leaf = this.app.workspace.getRightLeaf(false);
+		if (leaf) {
+			await leaf.setViewState({ type: GEN_RESEARCH_VIEW, active: true });
+		}
 	}
 
 	private async activateView() {

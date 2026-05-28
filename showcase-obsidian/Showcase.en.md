@@ -706,6 +706,103 @@ ged.table(headers, rows);
 ged.paragraph(`\nTotal children: ${rows.length}`);
 ```
 
+## Research Dashboard (gen-research)
+
+### gen-research
+
+> A **research dashboard** that automatically detects frontier ancestors — persons at the edge of your known family tree (no parents recorded). For each frontier person it estimates their life period, suggests relevant historical sources, and calculates research difficulty.
+
+> ⚠️ **Note:** only persons without recorded parents are shown — regardless of whether they are direct ancestors or not.
+
+*An empty block can also be inserted via the "GEDCOM: Insert gen-research block" command (Ctrl+P)*
+
+**Syntax:** the block requires no arguments — it scans the entire GEDCOM automatically.
+
+````markdown
+```gen-research
+```
+````
+
+#### Minimal — show all frontier ancestors
+
+```gen-research
+```
+
+---
+
+### How it works
+
+**Frontier detection:** any person whose `familiesAsChild` is empty (no parents in the GEDCOM file).
+
+**Life range estimation** — the plugin infers approximate birth/death years from:
+1. Direct `birthDate` / `deathDate` fields (exact)
+2. Any dated events (estimated)
+3. Children's birth dates: `firstChildBirth − 18` (estimated)
+
+**Source suggestions** (Russian Empire heuristics):
+| Condition | Suggested source |
+|-----------|-----------------|
+| Alive in 1858 | X ревизия |
+| Alive in 1834 | IX ревизия |
+| Alive in 1816 | VIII ревизия |
+| Alive in 1795 | V ревизия |
+| Born before 1917 | Исповедные росписи, Метрические книги |
+| Male + born before 1917 | Рекрутские списки |
+
+Detection is based on place fields matching `/росс|russia|россия|empire|СССР/i`.
+
+**Difficulty scoring:**
+| Score | Color | Meaning |
+|-------|-------|---------|
+| 0–3 | 🟢 LOW | Place known, multiple sources |
+| 4–7 | 🟡 MED | Some information available |
+| 8+ | 🔴 HIGH | No place, no sources, or flagged |
+
+---
+
+### UI Features
+
+| Feature | Description |
+|---------|-------------|
+| **Sort** | By Difficulty (default), Name, or Life Range |
+| **Filter** | Pinned only · No place · Hide ignored |
+| **Click row** | Expand research card with details |
+| **📌 button** | Pin/unpin a person (stays at top) |
+
+### Expandable Research Card
+
+Clicking a row opens a panel showing:
+- Person summary (name, life range, last event, ID)
+- Primary research window (`lifeRange ± buffer`)
+- Suggested historical sources
+- Flags: **No records**, **Pinned**, **Ignored**
+- Free-text notes field
+
+### Persistent State
+
+Manual flags and notes are saved **directly inside the code block**:
+
+```gen-research
+[person:I123]
+flags=no_records,pinned
+notes=possibly from Saratov guberniya
+
+[person:I482]
+difficulty_override=red
+```
+
+All state is keyed to GEDCOM IDs — renaming a person does not break saved flags.
+
+**Supported keys per `[person:ID]`:**
+
+| Key | Values | Description |
+|-----|--------|-------------|
+| `flags` | `no_records`, `pinned`, `ignored` | Comma-separated flags |
+| `notes` | any text | Free-text research note |
+| `difficulty_override` | `green`, `yellow`, `red` | Override the calculated difficulty |
+
+---
+
 ## Debugging
 
 > **Tip:** Enable [[#Debug Logging]] in plugin settings and open **View → Toggle Developer Tools** — plugin logs are output to the Console tab. This is useful for tracking down parse errors, diagram issues, or incorrect block rendering.

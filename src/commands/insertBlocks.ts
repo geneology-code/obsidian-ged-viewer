@@ -63,6 +63,11 @@ const INSERT_COMMANDS: InsertCommandDef[] = [
         nameKey: 'command.insertDiagramRelatives',
         blockType: 'ged-diagram-relatives',
     },
+    {
+        id: 'insert-gen-research',
+        nameKey: 'command.insertGenResearch',
+        blockType: 'gen-research',
+    },
 ];
 
 /**

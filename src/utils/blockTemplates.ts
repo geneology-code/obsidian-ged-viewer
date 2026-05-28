@@ -13,7 +13,8 @@ export type BlockType =
     | 'ged-diagram-ancestors'
     | 'ged-diagram-descendants'
     | 'ged-diagram-hourglass'
-    | 'ged-diagram-relatives';
+    | 'ged-diagram-relatives'
+    | 'gen-research';
 
 /**
  * Создает пустой блок кода для команды (без ID)
