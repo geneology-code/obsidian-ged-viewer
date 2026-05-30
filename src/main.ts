@@ -13,16 +13,19 @@ import {
     renderDiagramDescendantsBlock,
     renderDiagramHourglassBlock,
     renderDiagramRelativesBlock,
-    renderGenResearchBlock
+    renderGenResearchBlock,
+    renderGedHeurBlock
 } from './blocks';
 import { GEDCOM_SEARCH_VIEW, GedcomSearchView } from './views/GedcomSearchView';
 import { GEN_RESEARCH_VIEW, GenResearchView } from './views/GenResearchView';
 import { parseOverlay, serializeOverlay } from './research/overlayParser';
-import { OverlayState, DEFAULT_UI_STATE } from './research/types';
+import { OverlayState, DEFAULT_UI_STATE, SourceStatus, SOURCE_STATUSES } from './research/types';
+import { ReproductiveAge, DEFAULT_REPRODUCTIVE_AGE } from './types/settings';
 import { PersonListModal } from './commands/personList';
 import { registerInsertCommands } from './commands/insertBlocks';
 import { GEDCOMPluginSettings, DEFAULT_SETTINGS } from './types/settings';
 import { t } from './i18n';
+import { DEFAULT_RULES_YAML } from './research/heuristics';
 
 // Custom ribbon icon — family tree with search
 const FAMILY_SEARCH_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><g transform="translate(0,16) scale(0.1,-0.1)"><path d="M53 133 c-28 -19 -30 -43 -3 -43 22 0 27 -15 8 -23 -7 -3 3 -5 22 -5 19 0 29 2 23 5 -20 8 -15 23 7 23 28 0 25 24 -5 44 -29 19 -24 19 -52 -1z"/><path d="M7 44 c-4 -4 -7 -12 -7 -18 0 -6 5 -4 10 4 9 13 11 13 21 0 9 -12 10 -12 7 -1 -5 17 -21 25 -31 15z"/><path d="M67 44 c-10 -11 -8 -24 4 -24 5 0 7 5 4 10 -3 6 -2 10 4 10 5 0 12 -5 14 -10 3 -6 4 -5 3 2 -3 14 -20 21 -29 12z"/><path d="M127 44 c-10 -11 -8 -24 4 -24 5 0 7 5 4 10 -3 6 -2 10 4 10 5 0 12 -5 14 -10 3 -6 4 -5 3 2 -3 14 -20 21 -29 12z"/></g></svg>`;
@@ -31,6 +34,7 @@ export default class GEDCOMPlugin extends Plugin {
 	settings: GEDCOMPluginSettings;
 	gedcomService: GedcomService;
 	private researchViewOverlay: OverlayState = { ui: { ...DEFAULT_UI_STATE, expandedIds: [] }, persons: {} };
+	private sourceStatuses: Record<string, Record<string, number>> = {};
 
 	async onload() {
 		await this.loadSettings();
@@ -57,11 +61,16 @@ export default class GEDCOMPlugin extends Plugin {
 			leaf,
 			this.gedcomService,
 			() => this.settings.maxLifespanYears,
+			() => this.settings.heuristicsFilePath,
 			() => this.researchViewOverlay,
 			async (state) => {
 				this.researchViewOverlay = state;
-				await this.saveData({ ...this.settings, _researchOverlay: serializeOverlay(state) });
-			}
+				await this.saveData({ ...this.settings, _researchOverlay: serializeOverlay(state), sourceStatuses: this.sourceStatuses });
+			},
+			(id, name) => this.getSourceStatus(id, name),
+			(id, name, st) => this.saveSourceStatus(id, name, st),
+			(st) => this.getStatusEmoji(st),
+			() => this.settings.reproductiveAge,
 		));
 
 		// Register custom ribbon icon
@@ -121,8 +130,20 @@ export default class GEDCOMPlugin extends Plugin {
 			await renderDiagramRelativesBlock(source, el, ctx, this.gedcomService, this.settings.defaultDiagramGenerations);
 		});
 
-		this.registerMarkdownCodeBlockProcessor('gen-research', async (source, el, ctx) => {
-			await renderGenResearchBlock(source, el, ctx, this.gedcomService, this.app, this.settings.maxLifespanYears);
+		this.registerMarkdownCodeBlockProcessor('ged-research', async (source, el, ctx) => {
+			await renderGenResearchBlock(source, el, ctx, this.gedcomService, this.app, this.settings.maxLifespanYears, this.settings.heuristicsFilePath,
+				(id, name) => this.getSourceStatus(id, name),
+				(id, name, st) => this.saveSourceStatus(id, name, st),
+				(st) => this.getStatusEmoji(st),
+				this.settings.reproductiveAge);
+		});
+
+		this.registerMarkdownCodeBlockProcessor('ged-heur', async (source, el, ctx) => {
+			await renderGedHeurBlock(source, el, ctx, this.gedcomService, this.app, this.settings.maxLifespanYears, this.settings.heuristicsFilePath,
+				(id, name) => this.getSourceStatus(id, name),
+				(id, name, st) => this.saveSourceStatus(id, name, st),
+				(st) => this.getStatusEmoji(st),
+				this.settings.reproductiveAge);
 		});
 
 		this.registerMarkdownCodeBlockProcessor('ged-js', async (source, el, ctx) => {
@@ -161,10 +182,15 @@ export default class GEDCOMPlugin extends Plugin {
 	async loadSettings() {
 		const savedData = await this.loadData();
 		console.log('[GEDCOM Plugin] loadSettings: savedData=', savedData);
-		const { _researchOverlay, ...settingsData } = savedData || {};
+		const { _researchOverlay, sourceStatuses, reproductiveAge: savedRepro, ...settingsData } = savedData || {};
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, settingsData);
+		// Deep-merge reproductiveAge so partial saves don't lose default sub-fields
+		this.settings.reproductiveAge = { ...DEFAULT_REPRODUCTIVE_AGE, ...(savedRepro ?? {}) };
 		if (_researchOverlay) {
 			this.researchViewOverlay = parseOverlay(_researchOverlay);
+		}
+		if (sourceStatuses) {
+			this.sourceStatuses = sourceStatuses;
 		}
 		console.log('[GEDCOM Plugin] loadSettings: this.settings=', this.settings);
 	}
@@ -172,6 +198,24 @@ export default class GEDCOMPlugin extends Plugin {
 	async saveSettings() {
 		console.log('[GEDCOM Plugin] saveSettings: saving this.settings=', this.settings);
 		await this.saveData(this.settings);
+	}
+
+	private getSourceStatus(personId: string, sourceName: string): SourceStatus {
+		return (this.sourceStatuses[personId]?.[sourceName] ?? 0) as SourceStatus;
+	}
+
+	private getStatusEmoji(status: SourceStatus): string {
+		return this.settings.sourceStatusEmojis?.[status] || SOURCE_STATUSES[status].emoji;
+	}
+
+	private async saveSourceStatus(personId: string, sourceName: string, status: SourceStatus): Promise<void> {
+		if (!this.sourceStatuses[personId]) this.sourceStatuses[personId] = {};
+		this.sourceStatuses[personId][sourceName] = status;
+		await this.saveData({
+			...this.settings,
+			_researchOverlay: serializeOverlay(this.researchViewOverlay),
+			sourceStatuses: this.sourceStatuses,
+		});
 	}
 
 	private async activateResearchView() {
@@ -244,7 +288,8 @@ class GEDCOMSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		containerEl.createEl('h2', {text: t('common.gedcomGenealogySettings') || 'GEDCOM Genealogy Settings'});
+		// ── General ──────────────────────────────────────────────────────────
+		containerEl.createEl('h2', { text: t('common.gedcomGenealogySettings') || 'GEDCOM Genealogy Settings' });
 
 		new Setting(containerEl)
 			.setName(t('setting.gedcomFilePath') || 'GEDCOM file path')
@@ -305,6 +350,107 @@ class GEDCOMSettingTab extends PluginSettingTab {
 					this.plugin.settings.enableGedJS = value;
 					await this.plugin.saveSettings();
 					new Notice(value ? t('notice.gedJSBlocksEnabled') : t('notice.gedJSBlocksDisabled'));
+				}));
+
+		// ── Heuristics & Research ─────────────────────────────────────────────
+		containerEl.createEl('h2', { text: t('setting.heuristicsSection') || 'Heuristics & Research' });
+
+		let heuristicsTextComponent: import('obsidian').TextComponent;
+		new Setting(containerEl)
+			.setName(t('setting.heuristicsFilePath') || 'Heuristics rules file')
+			.setDesc(t('setting.heuristicsFilePathDescription') || 'Path to a YAML file with source suggestion rules for ged-research and ged-heur.')
+			.addText(text => {
+				heuristicsTextComponent = text;
+				text.setPlaceholder(t('setting.enterHeuristicsPath') || 'e.g. genealogy/heuristics.yaml')
+					.setValue(this.plugin.settings.heuristicsFilePath)
+					.onChange(async (value) => {
+						this.plugin.settings.heuristicsFilePath = value;
+						await this.plugin.saveSettings();
+					});
+			})
+			.addButton(btn => btn
+				.setButtonText(t('setting.createHeuristicsTemplate') || 'Create template')
+				.onClick(async () => {
+					const path = heuristicsTextComponent.getValue().trim();
+					if (!path) return;
+					const existing = this.app.vault.getFileByPath(path);
+					if (existing) {
+						new Notice((t('setting.heuristicsTemplateExists') || 'File already exists: ') + path);
+						return;
+					}
+					await this.app.vault.create(path, DEFAULT_RULES_YAML);
+					new Notice((t('setting.heuristicsTemplateCreated') || 'Template created: ') + path);
+				}));
+
+		// Reproductive age — spoiler
+		const reproDetails = containerEl.createEl('details');
+		reproDetails.createEl('summary').createEl('strong', {
+			text: t('setting.reproductiveAge') || 'Estimated reproductive age'
+		});
+		reproDetails.createEl('p', {
+			text: t('setting.reproductiveAgeDescription') || 'Used when a person has no dates but known children.',
+			cls: 'setting-item-description',
+		});
+
+		const ra = this.plugin.settings.reproductiveAge;
+		const saveRepro = async (patch: Partial<ReproductiveAge>) => {
+			this.plugin.settings.reproductiveAge = { ...this.plugin.settings.reproductiveAge, ...patch };
+			await this.plugin.saveSettings();
+		};
+		const makeReproInput = (container: HTMLElement, label: string, getValue: () => number, key: keyof ReproductiveAge) => {
+			new Setting(container)
+				.setName(label)
+				.addText(text => text
+					.setPlaceholder(String(DEFAULT_REPRODUCTIVE_AGE[key]))
+					.setValue(String(getValue()))
+					.onChange(async (value) => {
+						const n = parseInt(value, 10);
+						if (!isNaN(n) && n > 0) await saveRepro({ [key]: n });
+					}));
+		};
+
+		reproDetails.createEl('h4', { text: t('setting.reproductiveAgeMale') || 'Men' });
+		makeReproInput(reproDetails, t('setting.reproductiveAgeMin') || 'Minimum age', () => ra.maleMin, 'maleMin');
+		makeReproInput(reproDetails, t('setting.reproductiveAgeMax') || 'Maximum age', () => ra.maleMax, 'maleMax');
+
+		reproDetails.createEl('h4', { text: t('setting.reproductiveAgeFemale') || 'Women' });
+		makeReproInput(reproDetails, t('setting.reproductiveAgeMin') || 'Minimum age', () => ra.femaleMin, 'femaleMin');
+		makeReproInput(reproDetails, t('setting.reproductiveAgeMax') || 'Maximum age', () => ra.femaleMax, 'femaleMax');
+
+		// Emoji customization — spoiler
+		const emojiDetails = containerEl.createEl('details');
+		emojiDetails.createEl('summary').createEl('strong', {
+			text: t('setting.sourceStatusEmojis') || 'Research status emojis'
+		});
+		emojiDetails.createEl('p', {
+			text: t('setting.sourceStatusEmojisDescription') || 'Customize the emoji for each source research status. Leave blank to use the default.',
+			cls: 'setting-item-description',
+		});
+
+		for (let i = 0; i < 6; i++) {
+			const status = i as SourceStatus;
+			const def = SOURCE_STATUSES[status];
+			new Setting(emojiDetails)
+				.setName(`${def.emoji}  ${t(def.labelKey)}`)
+				.addText(text => text
+					.setPlaceholder(def.emoji)
+					.setValue(this.plugin.settings.sourceStatusEmojis?.[status] ?? '')
+					.onChange(async (value) => {
+						if (!this.plugin.settings.sourceStatusEmojis) {
+							this.plugin.settings.sourceStatusEmojis = ['', '', '', '', '', ''];
+						}
+						this.plugin.settings.sourceStatusEmojis[status] = value.trim();
+						await this.plugin.saveSettings();
+					}));
+		}
+
+		new Setting(emojiDetails)
+			.addButton(btn => btn
+				.setButtonText(t('setting.sourceStatusEmojisReset') || 'Reset to defaults')
+				.onClick(async () => {
+					this.plugin.settings.sourceStatusEmojis = ['', '', '', '', '', ''];
+					await this.plugin.saveSettings();
+					this.display();
 				}));
 	}
 }

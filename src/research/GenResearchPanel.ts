@@ -1,9 +1,12 @@
-import { App, AbstractInputSuggest, TFile } from 'obsidian';
+﻿import { App, AbstractInputSuggest, TFile } from 'obsidian';
 import { GedcomService } from '../gedcom/service';
-import { GedcomEvent } from '../gedcom/types';
+import { GedcomEvent, GedcomIndividual } from '../gedcom/types';
 import { detectFrontierAncestors } from './frontierDetector';
 import { estimateLifeRange, parseYear } from './lifeRangeEstimator';
-import { matchSources } from './heuristicMatcher';
+import { matchSources, loadRules } from './heuristics';
+import { Rule } from './heuristics/types';
+import { SOURCE_STATUSES, SourceStatus } from './types';
+import { ReproductiveAge, DEFAULT_REPRODUCTIVE_AGE } from '../types/settings';
 import { estimateDifficulty } from './difficultyEstimator';
 import { serializeOverlay } from './overlayParser';
 import {
@@ -47,6 +50,11 @@ const CSS = `
 .gen-research-pin-btn { opacity: 0.35; background: none; border: none; cursor: pointer; padding: 0; font-size: 1em; line-height: 1; }
 .gen-research-pin-btn.pinned { opacity: 1; }
 .gen-research-assess-select { margin-left: 6px; font-size: 0.85em; padding: 2px 4px; background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: 3px; color: var(--text-normal); }
+.gen-research-root-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 0.85em; }
+.gen-research-root-label { white-space: nowrap; color: var(--text-muted); }
+.gen-research-root-input { flex: 1; max-width: 260px; padding: 3px 6px; background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: 3px; color: var(--text-normal); font-size: 0.85em; }
+.gen-research-warning { color: var(--text-warning, #e8a600); font-size: 0.82em; margin: 0 0 6px 0; }
+.gen-research-root-error { color: var(--color-red, #c62828); font-size: 0.8em; }
 `;
 
 class NoteSuggest extends AbstractInputSuggest<TFile> {
@@ -86,11 +94,48 @@ class NoteSuggest extends AbstractInputSuggest<TFile> {
     }
 }
 
+class PersonSuggest extends AbstractInputSuggest<GedcomIndividual> {
+    private readonly el: HTMLInputElement;
+    private readonly service: GedcomService;
+
+    constructor(app: App, inputEl: HTMLInputElement, service: GedcomService) {
+        super(app, inputEl);
+        this.el = inputEl;
+        this.service = service;
+    }
+
+    getSuggestions(query: string): GedcomIndividual[] {
+        const lq = query.toLowerCase();
+        if (!lq) return [];
+        return this.service.getAllIndividuals()
+            .filter(p => (p.name || '').toLowerCase().includes(lq) || p.id.toLowerCase().includes(lq))
+            .slice(0, 20);
+    }
+
+    renderSuggestion(p: GedcomIndividual, el: HTMLElement): void {
+        el.createEl('div', { text: p.name || p.id, cls: 'gen-research-suggest-name' });
+        el.createEl('small', { text: p.id, cls: 'gen-research-suggest-path' });
+    }
+
+    selectSuggestion(p: GedcomIndividual, _evt: MouseEvent | KeyboardEvent): void {
+        this.el.value = p.name || p.id;
+        this.el.dispatchEvent(new Event('input'));
+        // Store raw ID as data attribute so blur handler can read it
+        this.el.dataset.selectedId = p.id.replace(/@/g, '');
+        this.close();
+    }
+}
+
 export interface GenResearchPanelOptions {
     container: HTMLElement;
     gedcomService: GedcomService;
     maxLifespanYears: number;
+    heuristicsFilePath: string;
+    reproductiveAge?: ReproductiveAge;
     app: App;
+    getSourceStatus: (personId: string, sourceName: string) => SourceStatus;
+    setSourceStatus: (personId: string, sourceName: string, status: SourceStatus) => Promise<void>;
+    getStatusEmoji: (status: SourceStatus) => string;
     /** Called when persistent state (flags, note links) changes. */
     onSave: (overlay: OverlayState) => Promise<void>;
     sourcePath?: string;
@@ -100,7 +145,12 @@ export class GenResearchPanel {
     private readonly container: HTMLElement;
     private readonly gedcomService: GedcomService;
     private readonly maxLifespanYears: number;
+    private readonly heuristicsFilePath: string;
+    private readonly reproductiveAge: ReproductiveAge;
     private readonly app: App;
+    private readonly getSourceStatus: (personId: string, sourceName: string) => SourceStatus;
+    private readonly setSourceStatus: (personId: string, sourceName: string, status: SourceStatus) => Promise<void>;
+    private readonly getStatusEmoji: (status: SourceStatus) => string;
     private readonly onSave: (overlay: OverlayState) => Promise<void>;
     private readonly sourcePath: string;
 
@@ -110,14 +160,21 @@ export class GenResearchPanel {
     private filterPinned = DEFAULT_UI_STATE.pinnedOnly;
     private filterNoPlace = DEFAULT_UI_STATE.noPlaceOnly;
     private expandedIds = new Set<string>();
+    private rootId: string = '';
     private uiInitialized = false;
     private lastOverlay: OverlayState = { ui: { ...DEFAULT_UI_STATE, expandedIds: [] }, persons: {} };
+    private rules: Rule[] | null = null;
 
     constructor(options: GenResearchPanelOptions) {
         this.container = options.container;
         this.gedcomService = options.gedcomService;
         this.maxLifespanYears = options.maxLifespanYears;
+        this.heuristicsFilePath = options.heuristicsFilePath;
+        this.reproductiveAge = options.reproductiveAge ?? DEFAULT_REPRODUCTIVE_AGE;
         this.app = options.app;
+        this.getSourceStatus = options.getSourceStatus;
+        this.setSourceStatus = options.setSourceStatus;
+        this.getStatusEmoji = options.getStatusEmoji;
         this.onSave = options.onSave;
         this.sourcePath = options.sourcePath ?? '';
     }
@@ -131,6 +188,8 @@ export class GenResearchPanel {
             this.filterPinned = overlay.ui.pinnedOnly;
             this.filterNoPlace = overlay.ui.noPlaceOnly;
             this.expandedIds = new Set(overlay.ui.expandedIds.map(id => `@${id}@`));
+            // Use saved rootId; auto-detect from GEDCOM is done lazily in renderContent()
+            this.rootId = overlay.ui.rootId ?? '';
             this.uiInitialized = true;
         }
         this.lastOverlay = overlay;
@@ -140,6 +199,7 @@ export class GenResearchPanel {
 
     /** Re-render preserving current in-memory UI state (e.g. on GEDCOM reload). */
     rerender(overlay: OverlayState): void {
+        this.rules = null; // force reload from vault on next render
         this.lastOverlay = overlay;
         this.container.empty();
         this.renderContent(overlay);
@@ -171,17 +231,18 @@ export class GenResearchPanel {
                 pinnedOnly: this.filterPinned,
                 noPlaceOnly: this.filterNoPlace,
                 expandedIds: [...this.expandedIds].map(id => id.replace(/@/g, '')),
+                rootId: this.rootId || undefined,
             },
             persons,
         };
     }
 
-    private buildPersonData(overlay: OverlayState): FrontierPerson[] {
-        const frontierIndividuals = detectFrontierAncestors(this.gedcomService)
+    private buildPersonData(overlay: OverlayState, rules: Rule[]): FrontierPerson[] {
+        const frontierIndividuals = detectFrontierAncestors(this.gedcomService, this.rootId || undefined)
             .filter((p): p is NonNullable<typeof p> => p != null);
 
         return frontierIndividuals.map(individual => {
-            const lifeRange = estimateLifeRange(individual, this.gedcomService, this.maxLifespanYears);
+            const lifeRange = estimateLifeRange(individual, this.gedcomService, this.maxLifespanYears, this.reproductiveAge);
 
             const hasPlace = !!(
                 individual.birthPlace ||
@@ -201,7 +262,7 @@ export class GenResearchPanel {
                   )
                 : null;
 
-            const sources = matchSources(individual, lifeRange);
+            const sources = matchSources(individual, lifeRange, rules);
             const rawId = individual.id.replace(/@/g, '');
             const override = overlay.persons[rawId];
             const difficulty = estimateDifficulty(lifeRange, sources, hasPlace, override);
@@ -218,7 +279,85 @@ export class GenResearchPanel {
             return;
         }
 
-        const persons = this.buildPersonData(overlay);
+        // Lazy load heuristics rules; rerender when ready
+        if (this.rules === null) {
+            this.rules = []; // prevent re-triggering while loading
+            if (this.heuristicsFilePath) {
+                void loadRules(this.app, this.heuristicsFilePath).then(r => {
+                    this.rules = r;
+                    this.rerenderCurrent();
+                });
+            }
+        }
+
+        // Lazy auto-detect: if no root saved yet, pick first person in file and persist
+        if (!this.rootId) {
+            const first = this.gedcomService.getAllIndividuals()[0];
+            if (first) {
+                this.rootId = first.id.replace(/@/g, '');
+                void this.rerenderAndSave();
+                return;
+            }
+        }
+
+        // Root person selector
+        const rootRow = this.container.createDiv({ cls: 'gen-research-root-row' });
+        rootRow.createEl('span', { text: t('research.rootLabel'), cls: 'gen-research-root-label' });
+        const rootInput = rootRow.createEl('input', { cls: 'gen-research-root-input' });
+        rootInput.type = 'text';
+        rootInput.placeholder = t('research.rootPlaceholder');
+
+        // Show name at render time; mark invalid if ID not found
+        const currentRoot = this.rootId ? this.gedcomService.getIndividual(this.rootId) : null;
+        if (this.rootId && !currentRoot) {
+            rootInput.value = this.rootId;
+            rootInput.style.borderColor = 'var(--color-red, #c62828)';
+            rootRow.createEl('span', { text: t('research.rootNotFound'), cls: 'gen-research-root-error' });
+        } else {
+            rootInput.value = currentRoot?.name || this.rootId;
+        }
+
+        new PersonSuggest(this.app, rootInput, this.gedcomService);
+        rootInput.addEventListener('blur', async () => {
+            // If suggest just set a data-selected-id, use that
+            const selectedId = rootInput.dataset.selectedId;
+            if (selectedId) {
+                delete rootInput.dataset.selectedId;
+                if (selectedId !== this.rootId) {
+                    this.rootId = selectedId;
+                    await this.rerenderAndSave();
+                }
+                return;
+            }
+            // Manual input: try as ID first, then exact name match
+            const val = rootInput.value.trim();
+            if (!val) {
+                if (this.rootId) { this.rootId = ''; await this.rerenderAndSave(); }
+                return;
+            }
+            const byId = this.gedcomService.getIndividual(val.replace(/@/g, ''));
+            if (byId) {
+                const newId = byId.id.replace(/@/g, '');
+                if (newId !== this.rootId) { this.rootId = newId; await this.rerenderAndSave(); }
+                return;
+            }
+            const byName = this.gedcomService.getAllIndividuals()
+                .find(p => (p.name || '').toLowerCase() === val.toLowerCase());
+            if (byName) {
+                const newId = byName.id.replace(/@/g, '');
+                if (newId !== this.rootId) { this.rootId = newId; await this.rerenderAndSave(); }
+                return;
+            }
+            // Not found — store as-is so error state renders
+            this.rootId = val.replace(/@/g, '');
+            await this.rerenderAndSave();
+        });
+
+        if (!this.rootId) {
+            this.container.createEl('p', { text: t('research.noRootWarning'), cls: 'gen-research-warning' });
+        }
+
+        const persons = this.buildPersonData(overlay, this.rules ?? []);
 
         const controls = this.container.createDiv({ cls: 'gen-research-controls' });
         this.addFilterCheckbox(controls, t('research.filterPinned'), this.filterPinned, v => {
@@ -347,17 +486,31 @@ export class GenResearchPanel {
         if (fp.firstEvent) summary.appendText(` · ${fp.firstEvent.type}${fp.firstEvent.date ? ' ' + fp.firstEvent.date : ''}`);
         summary.appendText(` · ${fp.individual.id}`);
 
-        if (fp.lifeRange.from !== null || fp.lifeRange.to !== null) {
-            const win = card.createDiv({ cls: 'gen-research-card-section' });
-            win.createEl('strong', { text: t('research.cardResearchWindow') });
-            win.appendText(`${fp.lifeRange.from !== null ? fp.lifeRange.from - 20 : '?'} – ${fp.lifeRange.to !== null ? fp.lifeRange.to + 10 : '?'}`);
-        }
-
         const srcDiv = card.createDiv({ cls: 'gen-research-card-section' });
         if (fp.sources.length > 0) {
             srcDiv.createEl('strong', { text: t('research.cardSources') });
             const ul = srcDiv.createEl('ul');
-            for (const src of fp.sources) ul.createEl('li', { text: src.name });
+            for (const src of fp.sources) {
+                const status = this.getSourceStatus(rawId, src.name);
+                const { labelKey } = SOURCE_STATUSES[status];
+                const emoji = this.getStatusEmoji(status);
+                const li = ul.createEl('li', { cls: 'gen-research-source-item' });
+                li.createSpan({ text: emoji + ' ', cls: 'gen-research-source-emoji' });
+                li.appendText(src.name);
+                li.title = t(labelKey);
+                li.style.cursor = 'pointer';
+                li.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    await this.setSourceStatus(rawId, src.name, ((status + 1) % 6) as SourceStatus);
+                    this.rerenderCurrent();
+                });
+                li.addEventListener('contextmenu', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    await this.setSourceStatus(rawId, src.name, ((status + 5) % 6) as SourceStatus);
+                    this.rerenderCurrent();
+                });
+            }
         } else {
             srcDiv.createEl('strong', { text: t('research.cardSources') + ' ' });
             srcDiv.appendText(t('research.cardNoSources'));
@@ -503,3 +656,4 @@ export class GenResearchPanel {
         }
     }
 }
+

@@ -14,7 +14,8 @@ export type BlockType =
     | 'ged-diagram-descendants'
     | 'ged-diagram-hourglass'
     | 'ged-diagram-relatives'
-    | 'gen-research';
+    | 'ged-research'
+    | 'ged-heur';
 
 /**
  * Создает пустой блок кода для команды (без ID)
@@ -119,6 +120,7 @@ export function getPersonBlockTypes(): BlockType[] {
         'ged-diagram-descendants',
         'ged-diagram-hourglass',
         'ged-diagram-relatives',
+        'ged-heur',
     ];
 }
 

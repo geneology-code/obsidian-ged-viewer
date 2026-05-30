@@ -10,6 +10,7 @@ export interface UIState {
     pinnedOnly: boolean;
     noPlaceOnly: boolean;
     expandedIds: string[]; // raw IDs without @, e.g. "I123"
+    rootId?: string; // raw ID without @, e.g. "I1"
 }
 
 export const DEFAULT_UI_STATE: UIState = {
@@ -19,6 +20,7 @@ export const DEFAULT_UI_STATE: UIState = {
     pinnedOnly: false,
     noPlaceOnly: false,
     expandedIds: [],
+    // rootId intentionally absent
 };
 
 export interface LifeRange {
@@ -40,6 +42,17 @@ export interface Difficulty {
 }
 
 export type PersonFlag = 'pinned' | 'ignored';
+
+export type SourceStatus = 0 | 1 | 2 | 3 | 4 | 5;
+
+export const SOURCE_STATUSES: Record<SourceStatus, { emoji: string; labelKey: string }> = {
+    0: { emoji: '💡', labelKey: 'source.status.0' },
+    1: { emoji: '📂', labelKey: 'source.status.1' },
+    2: { emoji: '🔍', labelKey: 'source.status.2' },
+    3: { emoji: '✅', labelKey: 'source.status.3' },
+    4: { emoji: '➖', labelKey: 'source.status.4' },
+    5: { emoji: '⛔', labelKey: 'source.status.5' },
+};
 
 export interface PersonOverride {
     flags: Set<PersonFlag>;

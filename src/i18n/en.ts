@@ -77,6 +77,22 @@ export const en: Record<string, string> = {
     'error.noGedcomIds': 'No valid GEDCOM IDs found. Use format: @I1@ or @I1@ @I2@ for comparison.',
     'error.personNotFound': 'Person with ID {id} not found.',
     'error.noPersonsFound': 'None of the specified persons were found.',
+
+    // ged-heur block
+    'heur.title': 'Suggested sources',
+    'heur.noSources': 'No matching sources found.',
+    'heur.noRules': 'Heuristics rules file not configured. Set it in plugin settings.',
+
+    // Source statuses
+    'source.status.0': 'Idea',
+    'source.status.1': 'Archive case found',
+    'source.status.2': 'In progress',
+    'source.status.3': 'Researched — found',
+    'source.status.4': 'Researched — not found',
+    'source.status.5': 'Document lost',
+    'setting.sourceStatusEmojis': 'Research status emojis',
+    'setting.sourceStatusEmojisDescription': 'Customize the emoji for each source research status. Leave blank to use the default.',
+    'setting.sourceStatusEmojisReset': 'Reset to defaults',
     
     // Person list modal
     'modal.selectPerson': 'Select a Person',
@@ -111,9 +127,10 @@ export const en: Record<string, string> = {
     'command.insertDiagramHourglass': 'Insert ged-diagram-hourglass block',
     'command.insertDiagramRelatives': 'Insert ged-diagram-relatives block',
     'command.insertGedJS': 'Insert ged-js block',
-    'command.insertGenResearch': 'Insert gen-research block',
+    'command.insertGedResearch': 'Insert ged-research block',
+    'command.insertGedHeur': 'Insert ged-heur block',
 
-    // Research dashboard (gen-research)
+    // Research dashboard (ged-research)
     'research.viewTitle': 'Research Dashboard',
     'research.openView': 'Open Research Dashboard',
     'research.noData': 'GEDCOM data not loaded.',
@@ -146,6 +163,10 @@ export const en: Record<string, string> = {
     'research.cardOpenNote': 'Open note',
     'research.flagPinned': 'Pinned',
     'research.flagIgnored': 'Ignored',
+    'research.rootLabel': 'Root person:',
+    'research.rootPlaceholder': 'Type name or ID...',
+    'research.rootNotFound': 'ID not found in GEDCOM',
+    'research.noRootWarning': 'No individuals found in GEDCOM file.',
     'research.source.rev10': '10th Revision (1858)',
     'research.source.rev9': '9th Revision (1834)',
     'research.source.rev8': '8th Revision (1816)',
@@ -159,6 +180,12 @@ export const en: Record<string, string> = {
     'setting.gedcomFilePath': 'GEDCOM file path',
     'setting.gedcomFilePathDescription': 'Path to your .ged file',
     'setting.enterGedcomPath': 'Enter path to .ged file',
+    'setting.heuristicsFilePath': 'Heuristics rules file',
+    'setting.heuristicsFilePathDescription': 'Path to a YAML file with source suggestion rules for ged-research and ged-heur. Leave empty to disable.',
+    'setting.enterHeuristicsPath': 'e.g. genealogy/heuristics.yaml',
+    'setting.createHeuristicsTemplate': 'Create template',
+    'setting.heuristicsTemplateCreated': 'Template created: ',
+    'setting.heuristicsTemplateExists': 'File already exists: ',
     'setting.maxLifespanYears': 'Maximum estimated lifespan (years)',
     'setting.maxLifespanYearsDescription': 'Maximum age for persons without death event (default: 100)',
     'setting.defaultDiagramGenerations': 'Default diagram generations',
@@ -167,6 +194,13 @@ export const en: Record<string, string> = {
     'setting.enableDebugLoggingDescription': 'Enable detailed debug logs for Topola diagrams and other plugin features (requires Obsidian reload)',
     'setting.enableGedJS': 'Enable ged-js blocks',
     'setting.enableGedJSDescription': 'Allow execution of user JavaScript code in ged-js code blocks. WARNING: This gives full access to Node.js APIs (require, process, etc.) — only use with trusted code.',
+    'setting.heuristicsSection': 'Heuristics & Research',
+    'setting.reproductiveAge': 'Estimated reproductive age',
+    'setting.reproductiveAgeDescription': 'Used when a person has no dates of their own but known children. Controls how birth year is inferred from child birth years.',
+    'setting.reproductiveAgeMale': 'Men',
+    'setting.reproductiveAgeFemale': 'Women',
+    'setting.reproductiveAgeMin': 'Minimum age',
+    'setting.reproductiveAgeMax': 'Maximum age',
 
     // Chronos
     'chronos.noData': 'GEDCOM data is not loaded yet. Please wait or reload the page.',

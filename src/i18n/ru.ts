@@ -77,6 +77,22 @@ export const ru: Record<string, string> = {
     'error.noGedcomIds': 'Действительные идентификаторы GEDCOM не найдены. Используйте формат: @I1@ или @I1@ @I2@ для сравнения.',
     'error.personNotFound': 'Человек с ID {id} не найден.',
     'error.noPersonsFound': 'Ни один из указанных людей не найден.',
+
+    // ged-heur block
+    'heur.title': 'Рекомендуемые источники',
+    'heur.noSources': 'Подходящих источников не найдено.',
+    'heur.noRules': 'Файл правил эвристик не настроен. Укажите его в настройках плагина.',
+
+    // Source statuses
+    'source.status.0': 'Идея',
+    'source.status.1': 'Архивное дело найдено',
+    'source.status.2': 'В работе',
+    'source.status.3': 'Исследовано — найдено',
+    'source.status.4': 'Исследовано — не найдено',
+    'source.status.5': 'Документ утерян',
+    'setting.sourceStatusEmojis': 'Смайлы статусов исследования',
+    'setting.sourceStatusEmojisDescription': 'Настройте эмоджи для каждого статуса источника. Оставьте пустым для использования по умолчанию.',
+    'setting.sourceStatusEmojisReset': 'Сбросить к значениям по умолчанию',
     
     // Person list modal
     'modal.selectPerson': 'Выберите человека',
@@ -111,9 +127,10 @@ export const ru: Record<string, string> = {
     'command.insertDiagramHourglass': 'Вставить блок ged-diagram-hourglass',
     'command.insertDiagramRelatives': 'Вставить блок ged-diagram-relatives',
     'command.insertGedJS': 'Вставить блок ged-js',
-    'command.insertGenResearch': 'Вставить блок gen-research',
+    'command.insertGedResearch': 'Вставить блок ged-research',
+    'command.insertGedHeur': 'Вставить блок ged-heur',
 
-    // Research dashboard (gen-research)
+    // Research dashboard (ged-research)
     'research.viewTitle': 'Дашборд исследований',
     'research.openView': 'Открыть дашборд исследований',
     'research.noData': 'Данные GEDCOM не загружены.',
@@ -146,6 +163,10 @@ export const ru: Record<string, string> = {
     'research.cardOpenNote': 'Открыть заметку',
     'research.flagPinned': 'Закреплён',
     'research.flagIgnored': 'Игнорировать',
+    'research.rootLabel': 'Корень:',
+    'research.rootPlaceholder': 'Имя или ID...',
+    'research.rootNotFound': 'ID не найден в GEDCOM',
+    'research.noRootWarning': 'В файле GEDCOM не найдено ни одной персоны.',
     'research.source.rev10': 'X ревизия (1858)',
     'research.source.rev9': 'IX ревизия (1834)',
     'research.source.rev8': 'VIII ревизия (1816)',
@@ -159,6 +180,12 @@ export const ru: Record<string, string> = {
     'setting.gedcomFilePath': 'Путь к файлу GEDCOM',
     'setting.gedcomFilePathDescription': 'Путь к вашему .ged файлу',
     'setting.enterGedcomPath': 'Введите путь к .ged файлу',
+    'setting.heuristicsFilePath': 'Файл правил эвристик',
+    'setting.heuristicsFilePathDescription': 'Путь к YAML-файлу с правилами подбора источников для ged-research и ged-heur. Оставьте пустым, чтобы отключить.',
+    'setting.enterHeuristicsPath': 'например, genealogy/heuristics.yaml',
+    'setting.createHeuristicsTemplate': 'Создать шаблон',
+    'setting.heuristicsTemplateCreated': 'Шаблон создан: ',
+    'setting.heuristicsTemplateExists': 'Файл уже существует: ',
     'setting.maxLifespanYears': 'Максимальный предположительный период жизни (лет)',
     'setting.maxLifespanYearsDescription': 'Максимальный возраст для персон без события смерти (по умолчанию: 100)',
     'setting.defaultDiagramGenerations': 'Количество поколений по умолчанию',
@@ -167,6 +194,13 @@ export const ru: Record<string, string> = {
     'setting.enableDebugLoggingDescription': 'Подробные логи для диаграмм Topola и других функций (требует перезагрузки Obsidian)',
     'setting.enableGedJS': 'Включить блоки ged-js',
     'setting.enableGedJSDescription': 'Выполнение JavaScript в блоках ged-js. ВНИМАНИЕ: полный доступ к Node.js API (require, process и т.д.) — используйте только доверенный код.',
+    'setting.heuristicsSection': 'Эвристики и исследования',
+    'setting.reproductiveAge': 'Предполагаемый репродуктивный возраст',
+    'setting.reproductiveAgeDescription': 'Используется когда у персоны нет своих дат, но известны даты рождения детей. Управляет тем, как год рождения выводится из дат рождения детей.',
+    'setting.reproductiveAgeMale': 'Мужчины',
+    'setting.reproductiveAgeFemale': 'Женщины',
+    'setting.reproductiveAgeMin': 'Минимальный возраст',
+    'setting.reproductiveAgeMax': 'Максимальный возраст',
 
     // Chronos
     'chronos.noData': 'Данные GEDCOM ещё не загружены. Подождите или перезагрузите страницу.',

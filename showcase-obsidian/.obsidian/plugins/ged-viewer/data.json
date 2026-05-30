@@ -1,7 +1,28 @@
 {
   "gedcomFilePath": "royal.ged",
-  "maxLifespanYears": 100,
+  "heuristicsFilePath": "rules.yaml",
+  "sourceStatusEmojis": [
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""
+  ],
+  "reproductiveAge": {
+    "maleMin": 15,
+    "maleMax": 60,
+    "femaleMin": 15,
+    "femaleMax": 49
+  },
+  "maxLifespanYears": 80,
   "enableDebugLogging": false,
   "defaultDiagramGenerations": 3,
-  "enableGedJS": true
+  "enableGedJS": true,
+  "_researchOverlay": "[ui]\nsort=lifeRange:asc\nroot=I1",
+  "sourceStatuses": {
+    "I37": {
+      "Рекрутские наборы": 0
+    }
+  }
 }

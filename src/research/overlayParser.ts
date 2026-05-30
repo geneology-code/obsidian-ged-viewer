@@ -68,6 +68,9 @@ function applyUIField(ui: UIState, key: string, value: string): void {
         case 'expanded':
             ui.expandedIds = value ? value.split(',').map(s => s.trim()).filter(Boolean) : [];
             break;
+        case 'root':
+            ui.rootId = value.trim() || undefined;
+            break;
     }
 }
 
@@ -93,6 +96,7 @@ export function serializeOverlay(state: OverlayState): string {
     // [ui] section — always emit so sort/filter/expanded state persists
     const ui = state.ui;
     const uiLines = ['[ui]', `sort=${ui.sortField}:${ui.sortDir}`];
+    if (ui.rootId) uiLines.push(`root=${ui.rootId}`);
     if (!ui.hideIgnored) uiLines.push('hide_ignored=false');
     if (ui.pinnedOnly) uiLines.push('pinned_only=true');
     if (ui.noPlaceOnly) uiLines.push('no_place_only=true');

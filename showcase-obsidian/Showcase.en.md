@@ -1,4 +1,4 @@
-# GEDCOM Genealogy Plugin — Showcase
+﻿# GEDCOM Genealogy Plugin — Showcase
 
 > An Obsidian plugin for displaying genealogical data from **GEDCOM files** directly in your vault. Load a `.ged` file — and get person cards, comparison tables, interactive ancestor/descendant diagrams, timelines, and even the ability to write custom JavaScript to access the data.
 
@@ -19,6 +19,8 @@
 | All relatives            | `ged-diagram-relatives`          | Full connection network                                                                |
 | Timeline                 | `ged-chronos`                    | Chronos plugin integration — standard chronos events + GEDCOM person/family events     |
 | User scripts             | `ged-js`                         | JavaScript with access to GEDCOM data                                                  |
+| Research dashboard       | `ged-research`                   | Frontier ancestors: life range, source suggestions, difficulty, research statuses      |
+| Source suggestions       | `ged-heur`                       | Heuristic source suggestions for a single person with clickable research statuses      |
 
 ### GEDCOM ID Format
 
@@ -135,6 +137,39 @@ After enabling:
 - When disabled — blocks show a "disabled" message
 
 Full documentation for `ged-js` — in the [[#Scripts (ged-js)]] section below.
+
+---
+
+### Heuristics & Research
+
+**Key:** `heuristicsFilePath`
+
+Path to a YAML file with source suggestion rules for `ged-research` and `ged-heur`. Leave empty to disable.
+
+Next to the input field is a **Create template** button — generates a pre-filled Russia rules file at the specified path.
+
+---
+
+#### Reproductive Age
+
+*(Collapsible)*
+
+Used when estimating the life range from children's birth dates.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Min father age | 15 | Earliest age a man can father a child |
+| Min mother age | 14 | Earliest age a woman can bear a child |
+| Max father age | 70 | Latest age a man can father a child |
+| Max mother age | 50 | Latest age a woman can bear a child |
+
+---
+
+#### Status Emojis
+
+*(Collapsible)*
+
+Customize the emoji for each of the 6 research source statuses. **Reset** button restores defaults: 💡 📂 🔍 ✅ ➖ ⛔
 
 ---
 
@@ -706,26 +741,26 @@ ged.table(headers, rows);
 ged.paragraph(`\nTotal children: ${rows.length}`);
 ```
 
-## Research Dashboard (gen-research)
+## Research Dashboard (ged-research)
 
-### gen-research
+### ged-research
 
 > A **research dashboard** that automatically detects frontier ancestors — persons at the edge of your known family tree (no parents recorded). For each frontier person it estimates their life period, suggests relevant historical sources, and calculates research difficulty.
 
 > ⚠️ **Note:** only persons without recorded parents are shown — regardless of whether they are direct ancestors or not.
 
-*An empty block can also be inserted via the "GEDCOM: Insert gen-research block" command (Ctrl+P)*
+*An empty block can also be inserted via the "GEDCOM: Insert ged-research block" command (Ctrl+P)*
 
 **Syntax:** the block requires no arguments — it scans the entire GEDCOM automatically.
 
 ````markdown
-```gen-research
+```ged-research
 ```
 ````
 
 #### Minimal — show all frontier ancestors
 
-```gen-research
+```ged-research
 ```
 
 ---
@@ -734,22 +769,25 @@ ged.paragraph(`\nTotal children: ${rows.length}`);
 
 **Frontier detection:** any person whose `familiesAsChild` is empty (no parents in the GEDCOM file).
 
-**Life range estimation** — the plugin infers approximate birth/death years from:
-1. Direct `birthDate` / `deathDate` fields (exact)
-2. Any dated events (estimated)
-3. Children's birth dates: `firstChildBirth − 18` (estimated)
+**Life range estimation** — the plugin combines all available data simultaneously:
+1. Direct `birthDate` / `deathDate` fields → exact
+2. Dated events → constrain birth/death as upper/lower bounds
+3. Children's birth dates + **reproductive age settings** → birth no later than `firstChild − minReproAge`; birth no earlier than `lastKnownAlive − maxLifespan`
 
-**Source suggestions** (Russian Empire heuristics):
-| Condition | Suggested source |
-|-----------|-----------------|
-| Alive in 1858 | X ревизия |
-| Alive in 1834 | IX ревизия |
-| Alive in 1816 | VIII ревизия |
-| Alive in 1795 | V ревизия |
-| Born before 1917 | Исповедные росписи, Метрические книги |
-| Male + born before 1917 | Рекрутские списки |
+**Source suggestions** — driven by a configurable **YAML rules file** (set in *Heuristics & Research* settings). Each rule specifies a condition and a suggested source name. Conditions support: place matching, date ranges, sex, logical combinators. See [[#ged-heur]] for the YAML format.
 
-Detection is based on place fields matching `/росс|russia|россия|empire|СССР/i`.
+**Research statuses** — each suggested source has a clickable status badge:
+
+| Status | Emoji | Meaning |
+|--------|-------|---------|
+| Idea | 💡 | Default — not checked yet |
+| Archive case found | 📂 | Found the archival reference |
+| In progress | 🔍 | Actively researching |
+| Researched — found | ✅ | Relevant data found |
+| Researched — not found | ➖ | Checked, nothing relevant |
+| Document lost | ⛔ | Source is destroyed/unavailable |
+
+**Left-click** a source to advance the status, **right-click** to go back. Statuses are stored globally in `data.json` — the same person's sources show the same status in both `ged-research` and `ged-heur`.
 
 **Difficulty scoring:**
 | Score | Color | Meaning |
@@ -764,6 +802,7 @@ Detection is based on place fields matching `/росс|russia|россия|empir
 
 | Feature | Description |
 |---------|-------------|
+| **Root person** | Set a starting ancestor — only their direct line is shown |
 | **Sort** | By Difficulty (default), Name, or Life Range |
 | **Filter** | Pinned only · No place · Hide ignored |
 | **Click row** | Expand research card with details |
@@ -772,22 +811,24 @@ Detection is based on place fields matching `/росс|russia|россия|empir
 ### Expandable Research Card
 
 Clicking a row opens a panel showing:
-- Person summary (name, life range, last event, ID)
-- Primary research window (`lifeRange ± buffer`)
-- Suggested historical sources
-- Flags: **No records**, **Pinned**, **Ignored**
-- Free-text notes field
+- Person summary (name, life range, first event, ID)
+- Suggested historical sources with status badges (LMB/RMB to cycle)
+- Flags: **Pinned**, **Ignored**
+- Assessment dropdown (override difficulty: green / yellow / red / auto)
+- Research note link (path to an Obsidian note)
 
 ### Persistent State
 
 Manual flags and notes are saved **directly inside the code block**:
 
-```gen-research
-[person:I123]
-flags=no_records,pinned
-notes=possibly from Saratov guberniya
+```ged-research
+[ui]
+sort=difficulty:desc
+root=I1
 
-[person:I482]
+[person:I123]
+flags=pinned
+noteLink=Research/Ivanov.md
 difficulty_override=red
 ```
 
@@ -797,9 +838,83 @@ All state is keyed to GEDCOM IDs — renaming a person does not break saved flag
 
 | Key | Values | Description |
 |-----|--------|-------------|
-| `flags` | `no_records`, `pinned`, `ignored` | Comma-separated flags |
-| `notes` | any text | Free-text research note |
+| `flags` | `pinned`, `ignored` | Comma-separated flags |
+| `noteLink` | vault path | Path to research note |
 | `difficulty_override` | `green`, `yellow`, `red` | Override the calculated difficulty |
+
+---
+
+## Source Suggestions (ged-heur)
+
+### ged-heur
+
+> Displays **heuristic source suggestions** for a single person. Evaluates all configured YAML rules against that person's place, dates, and sex — and shows a list of relevant sources with clickable research statuses.
+
+> ⚠️ **Note:** requires a heuristics rules file configured in *Settings → Heuristics & Research*.
+
+*An empty block can also be inserted via the "GEDCOM: Insert ged-heur block" command (Ctrl+P), or via the **+** button in [[#GEDCOM Search View]]*
+
+**Syntax:** single person ID (same format as other blocks).
+
+```ged-heur
+@I37@
+```
+
+**Status cycling:** left-click a source → advance (💡→📂→🔍→✅→➖→⛔→💡), right-click → retreat. Statuses are shared with `ged-research` — the same person's source shows the same status everywhere.
+
+---
+
+### YAML Rules Format
+
+The rules file is a YAML document with a top-level `rules` list. Each rule has a `when` condition and either a `source` (leaf) or nested `rules` (subtree evaluated only if parent condition is true).
+
+```yaml
+rules:
+  - when:
+      place_includes_any: ['Россия', 'Russia', 'СССР']
+    rules:
+      - when:
+          alive_in: 1858
+        source: "10-я ревизия (1858)"
+      - when:
+          born_before: 1897
+        source: "I Всероссийская перепись (1897)"
+      - when:
+          all:
+            - sex: M
+            - born_before: 1917
+        source: "Рекрутские наборы"
+  - when:
+      place_includes: 'Germany'
+    rules:
+      - when:
+          alive_in: 1867
+        source: "Prussian census 1867"
+```
+
+**Available conditions:**
+
+| Condition | Value | Meaning |
+|-----------|-------|---------|
+| `place_includes` | `'string'` | Any place field contains substring (case-insensitive) |
+| `place_includes_any` | `['a','b']` | Any place contains any of the strings |
+| `birth_place_includes` | `'string'` | Birth place specifically |
+| `death_place_includes` | `'string'` | Death place specifically |
+| `born_before` | `1900` | Estimated birth year < value |
+| `born_after` | `1700` | Estimated birth year > value |
+| `born_between` | `[1800,1900]` | Birth year in range |
+| `died_before` | `1950` | Estimated death year < value |
+| `died_after` | `1800` | Estimated death year > value |
+| `alive_in` | `1858` | Life range overlaps this year |
+| `alive_in_range` | `[1914,1918]` | Life range overlaps this period |
+| `sex` | `M` or `F` | Person's sex |
+| `has_dates` | `true/false` | Has at least one estimated date |
+| `has_birth_place` | `true/false` | Birth place is set |
+| `all` | `[condition,...]` | All conditions (AND) |
+| `any` | `[condition,...]` | Any condition (OR) |
+| `not` | `condition` | Negate |
+
+**Create default template:** *Settings → Heuristics & Research → Heuristics rules file → Create template* — generates a pre-filled Russia rules file at the specified path.
 
 ---
 
@@ -858,3 +973,4 @@ All state is keyed to GEDCOM IDs — renaming a person does not break saved flag
 1. Make sure the file is in GEDCOM 5.5 / 5.5.1 format
 2. Check encoding — **UTF-8** is recommended
 3. Try re-exporting from your genealogy program
+

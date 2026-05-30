@@ -1,10 +1,16 @@
 import { MarkdownPostProcessorContext, App } from 'obsidian';
 import { GedcomService } from '../gedcom/service';
-import { GedcomPersonRenderer, GedcomFamilyRenderer, GedcomPersonEventsRenderer, GedcomPersonFullRenderer, GedcomPersonCompareRenderer } from './GedcomRenderChild';
+import { GedcomPersonRenderer, GedcomFamilyRenderer, GedcomPersonEventsRenderer, GedcomPersonFullRenderer, GedcomPersonCompareRenderer, GedHeurRenderer } from './GedcomRenderChild';
 import { GedChronosRenderer } from './ChronosRenderChild';
 import { GedcomJSRenderer } from './GedcomJSRenderer';
 import { createTopolaRenderer } from './TopolaRenderer';
 import { GenResearchRenderChild } from './GenResearchRenderChild';
+import { SourceStatus } from '../research/types';
+import { ReproductiveAge, DEFAULT_REPRODUCTIVE_AGE } from '../types/settings';
+
+type GetStatus = (personId: string, sourceName: string) => SourceStatus;
+type SetStatus = (personId: string, sourceName: string, status: SourceStatus) => Promise<void>;
+type GetEmoji = (status: SourceStatus) => string;
 
 /**
  * Render the ged-person block
@@ -158,7 +164,7 @@ export async function renderDiagramRelativesBlock(
 }
 
 /**
- * Render the gen-research block — research dashboard for frontier ancestors
+ * Render the ged-research block — research dashboard for frontier ancestors
  */
 export async function renderGenResearchBlock(
     source: string,
@@ -166,9 +172,35 @@ export async function renderGenResearchBlock(
     ctx: MarkdownPostProcessorContext,
     gedcomService: GedcomService,
     app: App,
-    maxLifespanYears: number
+    maxLifespanYears: number,
+    heuristicsFilePath: string,
+    getStatus: GetStatus,
+    setStatus: SetStatus,
+    getEmoji: GetEmoji,
+    reproductiveAge: ReproductiveAge = DEFAULT_REPRODUCTIVE_AGE,
 ): Promise<void> {
-    const renderer = new GenResearchRenderChild(el, source, gedcomService, ctx, app, maxLifespanYears);
+    const renderer = new GenResearchRenderChild(el, source, gedcomService, ctx, app, maxLifespanYears, heuristicsFilePath, getStatus, setStatus, getEmoji, reproductiveAge);
+    ctx.addChild(renderer);
+    await renderer.render();
+}
+
+/**
+ * Render the ged-heur block — shows heuristic source suggestions for the first person ID
+ */
+export async function renderGedHeurBlock(
+    source: string,
+    el: HTMLElement,
+    ctx: MarkdownPostProcessorContext,
+    gedcomService: GedcomService,
+    app: App,
+    maxLifespanYears: number,
+    heuristicsFilePath: string,
+    getStatus: GetStatus,
+    setStatus: SetStatus,
+    getEmoji: GetEmoji,
+    reproductiveAge: ReproductiveAge = DEFAULT_REPRODUCTIVE_AGE,
+): Promise<void> {
+    const renderer = new GedHeurRenderer(el, source, gedcomService, ctx, app, maxLifespanYears, heuristicsFilePath, getStatus, setStatus, getEmoji, reproductiveAge);
     ctx.addChild(renderer);
     await renderer.render();
 }

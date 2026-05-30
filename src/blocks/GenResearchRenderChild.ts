@@ -2,11 +2,17 @@ import { App, MarkdownPostProcessorContext, TFile } from 'obsidian';
 import { GedcomService } from '../gedcom/service';
 import { GedcomRenderChild } from './GedcomRenderChild';
 import { parseOverlay, serializeOverlay } from '../research/overlayParser';
-import { OverlayState } from '../research/types';
+import { OverlayState, SourceStatus } from '../research/types';
+import { ReproductiveAge, DEFAULT_REPRODUCTIVE_AGE } from '../types/settings';
 import { GenResearchPanel } from '../research/GenResearchPanel';
 
 export class GenResearchRenderChild extends GedcomRenderChild {
     private maxLifespanYears: number;
+    private heuristicsFilePath: string;
+    private getStatus: (personId: string, sourceName: string) => SourceStatus;
+    private setStatus: (personId: string, sourceName: string, status: SourceStatus) => Promise<void>;
+    private getEmoji: (status: SourceStatus) => string;
+    private reproductiveAge: ReproductiveAge;
     private panel: GenResearchPanel | null = null;
 
     constructor(
@@ -15,10 +21,20 @@ export class GenResearchRenderChild extends GedcomRenderChild {
         gedcomService: GedcomService,
         ctx: MarkdownPostProcessorContext,
         app: App,
-        maxLifespanYears: number
+        maxLifespanYears: number,
+        heuristicsFilePath: string,
+        getStatus: (personId: string, sourceName: string) => SourceStatus,
+        setStatus: (personId: string, sourceName: string, status: SourceStatus) => Promise<void>,
+        getEmoji: (status: SourceStatus) => string,
+        reproductiveAge: ReproductiveAge = DEFAULT_REPRODUCTIVE_AGE,
     ) {
         super(container, source, gedcomService, ctx, app);
         this.maxLifespanYears = maxLifespanYears;
+        this.heuristicsFilePath = heuristicsFilePath;
+        this.getStatus = getStatus;
+        this.setStatus = setStatus;
+        this.getEmoji = getEmoji;
+        this.reproductiveAge = reproductiveAge;
     }
 
     async render(): Promise<void> {
@@ -28,7 +44,12 @@ export class GenResearchRenderChild extends GedcomRenderChild {
             container: this.containerEl,
             gedcomService: this.gedcomService,
             maxLifespanYears: this.maxLifespanYears,
+            heuristicsFilePath: this.heuristicsFilePath,
             app: this.app,
+            getSourceStatus: this.getStatus,
+            setSourceStatus: this.setStatus,
+            getStatusEmoji: this.getEmoji,
+            reproductiveAge: this.reproductiveAge,
             onSave: (o) => this.saveOverlay(o),
             sourcePath: this.ctx.sourcePath,
         });
