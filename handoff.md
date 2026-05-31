@@ -4,7 +4,7 @@
 
 Obsidian-плагин для работы с `.ged` (GEDCOM) файлами генеалогии. Показывает данные о персонах, семьях, событиях, строит диаграммы и хронологии прямо в заметках Obsidian через code-блоки.
 
-**Версия:** 1.1.0 (+ незакоммиченные изменения в heuristics)  
+**Версия:** 1.1.5  
 **Сборка:** `npm run build` → `main.js`  
 **Деплой в тест-vault:** `cp main.js showcase-obsidian/.obsidian/plugins/ged-viewer/main.js`
 
@@ -117,7 +117,7 @@ src/
 - `reproductiveAge: { maleMin, maleMax, femaleMin, femaleMax }` — для оценки жизненного диапазона
 - `sourceStatusEmojis: string[6]` — кастомные эмодзи статусов
 
-### После v1.1.0 — расширение эвристик (незакоммичено)
+### v1.1.5 — Расширение эвристик, улучшенный дашборд
 
 **Новые поля `GedcomIndividual` (`src/gedcom/types.ts`):**
 - `occupations?: string[]` — все значения OCCU из .ged (может быть несколько)
@@ -325,18 +325,6 @@ git push origin --delete vX.Y.Z
 
 ---
 
-## Текущее состояние (незакоммиченное)
+## Текущее состояние
 
-Все изменения незакоммичены. Untracked: `showcase-obsidian/rules.yaml`, `new_rules.yaml`, `test.yaml`.
-
-**Изменения в `src/research/` + `src/gedcom/`:**
-- Всё per-person состояние вынесено из overlay в `data.json`: `noteLinks`, `personFlags`, `difficultyOverrides`
-- Overlay хранит только `[ui]`; секции `[person:ID]` удалены
-- `GenResearchPanel` получил 6 callbacks для per-person данных
-- **Фильтры**: три независимых сегментных фильтра (Место / Период / Источники)
-- **Таблица**: колонка «Источники» (кол-во активных 💡📂🔍); сортировка по умолчанию `sources:desc`
-- **Карточка**: секции «Супруг(и)» и «Кровный потомок»; `FrontierPerson.activeSourceCount/spouses/bloodDescendant`
-- `GedcomIndividual` получил `occupations?: string[]` и `nobilityTitles?: string[]`
-- `service.ts`: извлечение OCCU, TITL, RESI (getAttributeResidence теперь в eventMethods)
-- `heuristics/`: полная таблица условий — см. раздел выше; `EvalContext` расширен; шаблон правил переработан на сословную развилку
-- `test.yaml` в корне — артефакт тестирования YAML-парсинга regex, можно удалить
+Untracked-артефакты: `new_rules.yaml`, `test.yaml` — можно удалить.
