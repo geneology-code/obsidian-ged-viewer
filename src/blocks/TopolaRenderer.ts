@@ -337,6 +337,7 @@ export class TopolaDiagramRenderer extends MarkdownRenderChild {
     private static _rawIndiCache = new Map<string, any>();
     private static _rawFamCache = new Map<string, any>();
     private static _fontLoaded = false; // Track font loading status
+    private static _instanceCounter = 0;
 
     private gedcomService: GedcomService;
     private source: string;
@@ -380,7 +381,8 @@ export class TopolaDiagramRenderer extends MarkdownRenderChild {
         this.chartType = chartType;
         this.defaultGenerations = defaultGenerations;
         const sourceHash = source.trim().replace(/@/g, '').replace(/\s+/g, '-').replace(/LVL:/g, '');
-        this.uniqueId = `topola-${chartType}-${sourceHash}`;
+        const instanceId = ++TopolaDiagramRenderer._instanceCounter;
+        this.uniqueId = `topola-${chartType}-${sourceHash}-${instanceId}`;
     }
 
     async onload(): Promise<void> {
