@@ -1,44 +1,28 @@
-import { OverlayState, PersonOverride, PersonFlag, DifficultyCategory, UIState, SortField, SortDir, DEFAULT_UI_STATE } from './types';
-
-type CurrentSection =
-    | { type: 'ui' }
-    | { type: 'person'; id: string }
-    | null;
+import { OverlayState, UIState, SortField, SortDir, PlaceFilter, PeriodFilter, SourceFilter, DEFAULT_UI_STATE } from './types';
 
 export function parseOverlay(source: string): OverlayState {
     const state: OverlayState = {
         ui: { ...DEFAULT_UI_STATE, expandedIds: [] },
-        persons: {},
     };
 
     const lines = source.split('\n');
-    let section: CurrentSection = null;
+    let inUI = false;
 
     for (const line of lines) {
         if (line.match(/^\[ui\]$/)) {
-            section = { type: 'ui' };
+            inUI = true;
             continue;
         }
-
-        const personMatch = line.match(/^\[person:([^\]]+)\]$/);
-        if (personMatch) {
-            const id = personMatch[1].trim();
-            section = { type: 'person', id };
-            state.persons[id] = { flags: new Set<PersonFlag>() };
+        if (line.match(/^\[/)) {
+            inUI = false;
             continue;
         }
-
-        if (!section) continue;
+        if (!inUI) continue;
 
         const kv = line.match(/^(\w+)=(.*)$/);
         if (!kv) continue;
         const [, key, value] = kv;
-
-        if (section.type === 'ui') {
-            applyUIField(state.ui, key, value);
-        } else {
-            applyPersonField(state.persons[section.id], key, value);
-        }
+        applyUIField(state.ui, key, value);
     }
 
     return state;
@@ -48,8 +32,10 @@ function applyUIField(ui: UIState, key: string, value: string): void {
     switch (key) {
         case 'sort': {
             const [field, dir] = value.split(':');
-            if (field === 'difficulty' || field === 'name' || field === 'lifeRange') {
+            if (field === 'name' || field === 'lifeRange' || field === 'sources') {
                 ui.sortField = field as SortField;
+            } else if (field === 'difficulty') {
+                ui.sortField = 'sources'; // backward compat
             }
             if (dir === 'asc' || dir === 'desc') {
                 ui.sortDir = dir as SortDir;
@@ -63,7 +49,23 @@ function applyUIField(ui: UIState, key: string, value: string): void {
             ui.pinnedOnly = value === 'true';
             break;
         case 'no_place_only':
-            ui.noPlaceOnly = value === 'true';
+            // backward compat: old boolean → new enum
+            if (value === 'true') ui.placeFilter = 'no-place';
+            break;
+        case 'place_filter':
+            if (value === 'no-place' || value === 'has-place' || value === 'all') {
+                ui.placeFilter = value as PlaceFilter;
+            }
+            break;
+        case 'period_filter':
+            if (value === 'no-period' || value === 'estimated' || value === 'has-exact' || value === 'all') {
+                ui.periodFilter = value as PeriodFilter;
+            }
+            break;
+        case 'source_filter':
+            if (value === 'has-sources' || value === 'no-sources' || value === 'all') {
+                ui.sourceFilter = value as SourceFilter;
+            }
             break;
         case 'expanded':
             ui.expandedIds = value ? value.split(',').map(s => s.trim()).filter(Boolean) : [];
@@ -74,48 +76,15 @@ function applyUIField(ui: UIState, key: string, value: string): void {
     }
 }
 
-function applyPersonField(person: PersonOverride, key: string, value: string): void {
-    if (key === 'flags') {
-        for (const flag of value.split(',').map(s => s.trim())) {
-            if (flag === 'pinned' || flag === 'ignored') {
-                person.flags.add(flag as PersonFlag);
-            }
-        }
-    } else if (key === 'noteLink') {
-        person.noteLink = value;
-    } else if (key === 'difficulty_override') {
-        if (value === 'green' || value === 'yellow' || value === 'red') {
-            person.difficultyOverride = value as DifficultyCategory;
-        }
-    }
-}
-
 export function serializeOverlay(state: OverlayState): string {
-    const sections: string[] = [];
-
-    // [ui] section — always emit so sort/filter/expanded state persists
     const ui = state.ui;
-    const uiLines = ['[ui]', `sort=${ui.sortField}:${ui.sortDir}`];
-    if (ui.rootId) uiLines.push(`root=${ui.rootId}`);
-    if (!ui.hideIgnored) uiLines.push('hide_ignored=false');
-    if (ui.pinnedOnly) uiLines.push('pinned_only=true');
-    if (ui.noPlaceOnly) uiLines.push('no_place_only=true');
-    if (ui.expandedIds.length > 0) uiLines.push(`expanded=${ui.expandedIds.join(',')}`);
-    sections.push(uiLines.join('\n'));
-
-    // [person:ID] sections
-    for (const [id, override] of Object.entries(state.persons)) {
-        const hasFlags = override.flags.size > 0;
-        const hasNoteLink = override.noteLink && override.noteLink.trim();
-        const hasOverride = override.difficultyOverride;
-        if (!hasFlags && !hasNoteLink && !hasOverride) continue;
-
-        const lines = [`[person:${id}]`];
-        if (hasFlags) lines.push(`flags=${[...override.flags].join(',')}`);
-        if (hasNoteLink) lines.push(`noteLink=${override.noteLink!.trim()}`);
-        if (hasOverride) lines.push(`difficulty_override=${override.difficultyOverride}`);
-        sections.push(lines.join('\n'));
-    }
-
-    return sections.join('\n\n');
+    const lines = ['[ui]', `sort=${ui.sortField}:${ui.sortDir}`];
+    if (ui.rootId) lines.push(`root=${ui.rootId}`);
+    if (!ui.hideIgnored) lines.push('hide_ignored=false');
+    if (ui.pinnedOnly) lines.push('pinned_only=true');
+    if (ui.placeFilter !== 'all') lines.push(`place_filter=${ui.placeFilter}`);
+    if (ui.periodFilter !== 'all') lines.push(`period_filter=${ui.periodFilter}`);
+    if (ui.sourceFilter !== 'all') lines.push(`source_filter=${ui.sourceFilter}`);
+    if (ui.expandedIds.length > 0) lines.push(`expanded=${ui.expandedIds.join(',')}`);
+    return lines.join('\n');
 }

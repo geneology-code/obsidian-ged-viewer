@@ -3,6 +3,7 @@ import { LifeRange, ResearchSource } from '../types';
 
 // --- Leaf conditions ---
 
+export type Always = { always: boolean };
 export type PlaceIncludes = { place_includes: string };
 export type PlaceIncludesAny = { place_includes_any: string[] };
 export type BirthPlaceIncludes = { birth_place_includes: string };
@@ -19,6 +20,7 @@ export type HasDates = { has_dates: boolean };
 export type HasBirthPlace = { has_birth_place: boolean };
 
 export type LeafCondition =
+    | Always
     | PlaceIncludes
     | PlaceIncludesAny
     | BirthPlaceIncludes

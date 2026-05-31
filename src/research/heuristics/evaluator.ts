@@ -6,6 +6,7 @@ function allPlacesOf(ctx: EvalContext): string {
 }
 
 function evalCondition(cond: Condition, ctx: EvalContext): boolean {
+    if ('always' in cond) return cond.always;
     // --- Combinators ---
     if ('all' in cond) return cond.all.every(c => evalCondition(c, ctx));
     if ('any' in cond) return cond.any.some(c => evalCondition(c, ctx));

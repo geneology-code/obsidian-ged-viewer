@@ -33,8 +33,11 @@ const FAMILY_SEARCH_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0
 export default class GEDCOMPlugin extends Plugin {
 	settings: GEDCOMPluginSettings;
 	gedcomService: GedcomService;
-	private researchViewOverlay: OverlayState = { ui: { ...DEFAULT_UI_STATE, expandedIds: [] }, persons: {} };
+	private researchViewOverlay: OverlayState = { ui: { ...DEFAULT_UI_STATE, expandedIds: [] } };
 	private sourceStatuses: Record<string, Record<string, number>> = {};
+	private noteLinks: Record<string, string> = {};
+	private personFlags: Record<string, string[]> = {};
+	private difficultyOverrides: Record<string, string> = {};
 
 	async onload() {
 		await this.loadSettings();
@@ -65,11 +68,17 @@ export default class GEDCOMPlugin extends Plugin {
 			() => this.researchViewOverlay,
 			async (state) => {
 				this.researchViewOverlay = state;
-				await this.saveData({ ...this.settings, _researchOverlay: serializeOverlay(state), sourceStatuses: this.sourceStatuses });
+				await this.saveData(this.buildSavePayload());
 			},
 			(id, name) => this.getSourceStatus(id, name),
 			(id, name, st) => this.saveSourceStatus(id, name, st),
 			(st) => this.getStatusEmoji(st),
+			(id) => this.getNoteLink(id),
+			(id, link) => this.saveNoteLink(id, link),
+			(id) => this.getPersonFlags(id),
+			(id, flags) => this.savePersonFlags(id, flags),
+			(id) => this.getDifficultyOverride(id),
+			(id, ov) => this.saveDifficultyOverride(id, ov),
 			() => this.settings.reproductiveAge,
 		));
 
@@ -135,6 +144,12 @@ export default class GEDCOMPlugin extends Plugin {
 				(id, name) => this.getSourceStatus(id, name),
 				(id, name, st) => this.saveSourceStatus(id, name, st),
 				(st) => this.getStatusEmoji(st),
+				(id) => this.getNoteLink(id),
+				(id, link) => this.saveNoteLink(id, link),
+				(id) => this.getPersonFlags(id),
+				(id, flags) => this.savePersonFlags(id, flags),
+				(id) => this.getDifficultyOverride(id),
+				(id, ov) => this.saveDifficultyOverride(id, ov),
 				this.settings.reproductiveAge);
 		});
 
@@ -182,7 +197,7 @@ export default class GEDCOMPlugin extends Plugin {
 	async loadSettings() {
 		const savedData = await this.loadData();
 		console.log('[GEDCOM Plugin] loadSettings: savedData=', savedData);
-		const { _researchOverlay, sourceStatuses, reproductiveAge: savedRepro, ...settingsData } = savedData || {};
+		const { _researchOverlay, sourceStatuses, noteLinks, personFlags, difficultyOverrides, reproductiveAge: savedRepro, ...settingsData } = savedData || {};
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, settingsData);
 		// Deep-merge reproductiveAge so partial saves don't lose default sub-fields
 		this.settings.reproductiveAge = { ...DEFAULT_REPRODUCTIVE_AGE, ...(savedRepro ?? {}) };
@@ -192,12 +207,32 @@ export default class GEDCOMPlugin extends Plugin {
 		if (sourceStatuses) {
 			this.sourceStatuses = sourceStatuses;
 		}
+		if (noteLinks) {
+			this.noteLinks = noteLinks;
+		}
+		if (personFlags) {
+			this.personFlags = personFlags;
+		}
+		if (difficultyOverrides) {
+			this.difficultyOverrides = difficultyOverrides;
+		}
 		console.log('[GEDCOM Plugin] loadSettings: this.settings=', this.settings);
 	}
 
 	async saveSettings() {
 		console.log('[GEDCOM Plugin] saveSettings: saving this.settings=', this.settings);
-		await this.saveData(this.settings);
+		await this.saveData(this.buildSavePayload());
+	}
+
+	private buildSavePayload() {
+		return {
+			...this.settings,
+			_researchOverlay: serializeOverlay(this.researchViewOverlay),
+			sourceStatuses: this.sourceStatuses,
+			noteLinks: this.noteLinks,
+			personFlags: this.personFlags,
+			difficultyOverrides: this.difficultyOverrides,
+		};
 	}
 
 	private getSourceStatus(personId: string, sourceName: string): SourceStatus {
@@ -211,11 +246,46 @@ export default class GEDCOMPlugin extends Plugin {
 	private async saveSourceStatus(personId: string, sourceName: string, status: SourceStatus): Promise<void> {
 		if (!this.sourceStatuses[personId]) this.sourceStatuses[personId] = {};
 		this.sourceStatuses[personId][sourceName] = status;
-		await this.saveData({
-			...this.settings,
-			_researchOverlay: serializeOverlay(this.researchViewOverlay),
-			sourceStatuses: this.sourceStatuses,
-		});
+		await this.saveData(this.buildSavePayload());
+	}
+
+	private getNoteLink(personId: string): string {
+		return this.noteLinks[personId] ?? '';
+	}
+
+	private async saveNoteLink(personId: string, link: string): Promise<void> {
+		if (link) {
+			this.noteLinks[personId] = link;
+		} else {
+			delete this.noteLinks[personId];
+		}
+		await this.saveData(this.buildSavePayload());
+	}
+
+	private getPersonFlags(personId: string): Set<import('./research/types').PersonFlag> {
+		return new Set((this.personFlags[personId] ?? []) as import('./research/types').PersonFlag[]);
+	}
+
+	private async savePersonFlags(personId: string, flags: Set<import('./research/types').PersonFlag>): Promise<void> {
+		if (flags.size > 0) {
+			this.personFlags[personId] = [...flags];
+		} else {
+			delete this.personFlags[personId];
+		}
+		await this.saveData(this.buildSavePayload());
+	}
+
+	private getDifficultyOverride(personId: string): import('./research/types').DifficultyCategory | undefined {
+		return this.difficultyOverrides[personId] as import('./research/types').DifficultyCategory | undefined;
+	}
+
+	private async saveDifficultyOverride(personId: string, override: import('./research/types').DifficultyCategory | undefined): Promise<void> {
+		if (override) {
+			this.difficultyOverrides[personId] = override;
+		} else {
+			delete this.difficultyOverrides[personId];
+		}
+		await this.saveData(this.buildSavePayload());
 	}
 
 	private async activateResearchView() {

@@ -11,6 +11,12 @@ import { ReproductiveAge, DEFAULT_REPRODUCTIVE_AGE } from '../types/settings';
 type GetStatus = (personId: string, sourceName: string) => SourceStatus;
 type SetStatus = (personId: string, sourceName: string, status: SourceStatus) => Promise<void>;
 type GetEmoji = (status: SourceStatus) => string;
+type GetNoteLink = (personId: string) => string;
+type SaveNoteLink = (personId: string, link: string) => Promise<void>;
+type GetPersonFlags = (personId: string) => Set<import('../research/types').PersonFlag>;
+type SavePersonFlags = (personId: string, flags: Set<import('../research/types').PersonFlag>) => Promise<void>;
+type GetDifficultyOverride = (personId: string) => import('../research/types').DifficultyCategory | undefined;
+type SaveDifficultyOverride = (personId: string, override: import('../research/types').DifficultyCategory | undefined) => Promise<void>;
 
 /**
  * Render the ged-person block
@@ -177,9 +183,15 @@ export async function renderGenResearchBlock(
     getStatus: GetStatus,
     setStatus: SetStatus,
     getEmoji: GetEmoji,
+    getNoteLink: GetNoteLink,
+    saveNoteLink: SaveNoteLink,
+    getPersonFlags: GetPersonFlags,
+    savePersonFlags: SavePersonFlags,
+    getDifficultyOverride: GetDifficultyOverride,
+    saveDifficultyOverride: SaveDifficultyOverride,
     reproductiveAge: ReproductiveAge = DEFAULT_REPRODUCTIVE_AGE,
 ): Promise<void> {
-    const renderer = new GenResearchRenderChild(el, source, gedcomService, ctx, app, maxLifespanYears, heuristicsFilePath, getStatus, setStatus, getEmoji, reproductiveAge);
+    const renderer = new GenResearchRenderChild(el, source, gedcomService, ctx, app, maxLifespanYears, heuristicsFilePath, getStatus, setStatus, getEmoji, getNoteLink, saveNoteLink, getPersonFlags, savePersonFlags, getDifficultyOverride, saveDifficultyOverride, reproductiveAge);
     ctx.addChild(renderer);
     await renderer.render();
 }

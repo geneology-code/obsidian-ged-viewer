@@ -17,6 +17,12 @@ export class GenResearchView extends ItemView {
     private readonly getStatusFn: (personId: string, sourceName: string) => SourceStatus;
     private readonly setStatusFn: (personId: string, sourceName: string, status: SourceStatus) => Promise<void>;
     private readonly getEmojiFn: (status: SourceStatus) => string;
+    private readonly getNoteLinkFn: (personId: string) => string;
+    private readonly saveNoteLinkFn: (personId: string, link: string) => Promise<void>;
+    private readonly getPersonFlagsFn: (personId: string) => Set<import('../research/types').PersonFlag>;
+    private readonly savePersonFlagsFn: (personId: string, flags: Set<import('../research/types').PersonFlag>) => Promise<void>;
+    private readonly getDifficultyOverrideFn: (personId: string) => import('../research/types').DifficultyCategory | undefined;
+    private readonly saveDifficultyOverrideFn: (personId: string, override: import('../research/types').DifficultyCategory | undefined) => Promise<void>;
     private readonly reproductiveAgeFn: () => ReproductiveAge;
     private panel: GenResearchPanel | null = null;
 
@@ -30,6 +36,12 @@ export class GenResearchView extends ItemView {
         getStatus: (personId: string, sourceName: string) => SourceStatus,
         setStatus: (personId: string, sourceName: string, status: SourceStatus) => Promise<void>,
         getEmoji: (status: SourceStatus) => string,
+        getNoteLink: (personId: string) => string,
+        saveNoteLink: (personId: string, link: string) => Promise<void>,
+        getPersonFlags: (personId: string) => Set<import('../research/types').PersonFlag>,
+        savePersonFlags: (personId: string, flags: Set<import('../research/types').PersonFlag>) => Promise<void>,
+        getDifficultyOverride: (personId: string) => import('../research/types').DifficultyCategory | undefined,
+        saveDifficultyOverride: (personId: string, override: import('../research/types').DifficultyCategory | undefined) => Promise<void>,
         reproductiveAge: () => ReproductiveAge = () => DEFAULT_REPRODUCTIVE_AGE,
     ) {
         super(leaf);
@@ -41,6 +53,12 @@ export class GenResearchView extends ItemView {
         this.getStatusFn = getStatus;
         this.setStatusFn = setStatus;
         this.getEmojiFn = getEmoji;
+        this.getNoteLinkFn = getNoteLink;
+        this.saveNoteLinkFn = saveNoteLink;
+        this.getPersonFlagsFn = getPersonFlags;
+        this.savePersonFlagsFn = savePersonFlags;
+        this.getDifficultyOverrideFn = getDifficultyOverride;
+        this.saveDifficultyOverrideFn = saveDifficultyOverride;
         this.reproductiveAgeFn = reproductiveAge;
     }
 
@@ -59,10 +77,15 @@ export class GenResearchView extends ItemView {
             getSourceStatus: this.getStatusFn,
             setSourceStatus: this.setStatusFn,
             getStatusEmoji: this.getEmojiFn,
+            getNoteLink: this.getNoteLinkFn,
+            saveNoteLink: this.saveNoteLinkFn,
+            getPersonFlags: this.getPersonFlagsFn,
+            savePersonFlags: this.savePersonFlagsFn,
+            getDifficultyOverride: this.getDifficultyOverrideFn,
+            saveDifficultyOverride: this.saveDifficultyOverrideFn,
             reproductiveAge: this.reproductiveAgeFn(),
             onSave: async (overlay) => {
                 await this.saveOverlayFn(overlay);
-                // No extra rerender needed — panel already did rerenderCurrent() before calling onSave
             },
         });
         this.panel.render(this.loadOverlay());

@@ -1,4 +1,4 @@
-﻿# GEDCOM Genealogy Plugin — Showcase
+# GEDCOM Genealogy Plugin — Showcase
 
 > An Obsidian plugin for displaying genealogical data from **GEDCOM files** directly in your vault. Load a `.ged` file — and get person cards, comparison tables, interactive ancestor/descendant diagrams, timelines, and even the ability to write custom JavaScript to access the data.
 
@@ -19,7 +19,7 @@
 | All relatives            | `ged-diagram-relatives`          | Full connection network                                                                |
 | Timeline                 | `ged-chronos`                    | Chronos plugin integration — standard chronos events + GEDCOM person/family events     |
 | User scripts             | `ged-js`                         | JavaScript with access to GEDCOM data                                                  |
-| Research dashboard       | `ged-research`                   | Frontier ancestors: life range, source suggestions, difficulty, research statuses      |
+| Research dashboard       | `ged-research`                   | Frontier ancestors: life range, source suggestions, segmented filters, research statuses |
 | Source suggestions       | `ged-heur`                       | Heuristic source suggestions for a single person with clickable research statuses      |
 
 ### GEDCOM ID Format
@@ -789,13 +789,6 @@ ged.paragraph(`\nTotal children: ${rows.length}`);
 
 **Left-click** a source to advance the status, **right-click** to go back. Statuses are stored globally in `data.json` — the same person's sources show the same status in both `ged-research` and `ged-heur`.
 
-**Difficulty scoring:**
-| Score | Color | Meaning |
-|-------|-------|---------|
-| 0–3 | 🟢 LOW | Place known, multiple sources |
-| 4–7 | 🟡 MED | Some information available |
-| 8+ | 🔴 HIGH | No place, no sources, or flagged |
-
 ---
 
 ### UI Features
@@ -803,8 +796,12 @@ ged.paragraph(`\nTotal children: ${rows.length}`);
 | Feature | Description |
 |---------|-------------|
 | **Root person** | Set a starting ancestor — only their direct line is shown |
-| **Sort** | By Difficulty (default), Name, or Life Range |
-| **Filter** | Pinned only · No place · Hide ignored |
+| **"Sources" column** | Count of suggested sources in active statuses 💡📂🔍 |
+| **Sort** | By source count (default), Name, or Life Range |
+| **Filters (row 1)** | 📌 Pinned only · ⛔ Hide ignored |
+| **Filters (row 2)** | Sources: All / Has / None |
+| **Filters (row 3)** | Place: All / No place / Has place |
+| **Filters (row 4)** | Period: All / No period / Estimated ~ / Has exact |
 | **Click row** | Expand research card with details |
 | **📌 button** | Pin/unpin a person (stays at top) |
 
@@ -812,35 +809,36 @@ ged.paragraph(`\nTotal children: ${rows.length}`);
 
 Clicking a row opens a panel showing:
 - Person summary (name, life range, first event, ID)
-- Suggested historical sources with status badges (LMB/RMB to cycle)
+- **Spouse(s)** (name, life years)
+- **Blood descendant** — direct child linking this person to the ROOT
+- Suggested historical sources with clickable status badges (LMB / RMB to cycle)
 - Flags: **Pinned**, **Ignored**
-- Assessment dropdown (override difficulty: green / yellow / red / auto)
-- Research note link (path to an Obsidian note)
+- Research note link (with vault autocomplete)
 
 ### Persistent State
 
-Manual flags and notes are saved **directly inside the code block**:
+The block stores only **view UI state** (sort, filters, root, expanded cards):
 
 ```ged-research
 [ui]
-sort=difficulty:desc
+sort=sources:desc
 root=I1
-
-[person:I123]
-flags=pinned
-noteLink=Research/Ivanov.md
-difficulty_override=red
 ```
 
-All state is keyed to GEDCOM IDs — renaming a person does not break saved flags.
+Available keys:
 
-**Supported keys per `[person:ID]`:**
+| Key | Values | Default |
+|-----|--------|---------|
+| `sort=field:dir` | `sources`, `name`, `lifeRange` · `asc`/`desc` | `sources:desc` |
+| `root=I1` | raw ID without @ | — |
+| `hide_ignored=false` | `true`/`false` | `true` |
+| `pinned_only=true` | `true`/`false` | `false` |
+| `place_filter=no-place` | `all` / `no-place` / `has-place` | `all` |
+| `period_filter=estimated` | `all` / `no-period` / `estimated` / `has-exact` | `all` |
+| `source_filter=has-sources` | `all` / `has-sources` / `no-sources` | `all` |
+| `expanded=I23,I45` | comma-separated raw IDs | — |
 
-| Key | Values | Description |
-|-----|--------|-------------|
-| `flags` | `pinned`, `ignored` | Comma-separated flags |
-| `noteLink` | vault path | Path to research note |
-| `difficulty_override` | `green`, `yellow`, `red` | Override the calculated difficulty |
+**Flags and research note links** are stored **globally** in the plugin's `data.json` — the same data is shared across all `ged-research` blocks and the sidebar panel. All state is keyed to GEDCOM IDs — renaming a person does not break saved data.
 
 ---
 
@@ -896,6 +894,7 @@ rules:
 
 | Condition | Value | Meaning |
 |-----------|-------|---------|
+| `always` | `true/false` | Always matches (or never) — use `true` for unconditional rules inside a parent block |
 | `place_includes` | `'string'` | Any place field contains substring (case-insensitive) |
 | `place_includes_any` | `['a','b']` | Any place contains any of the strings |
 | `birth_place_includes` | `'string'` | Birth place specifically |

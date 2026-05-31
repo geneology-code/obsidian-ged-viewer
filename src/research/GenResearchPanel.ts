@@ -10,15 +10,16 @@ import { ReproductiveAge, DEFAULT_REPRODUCTIVE_AGE } from '../types/settings';
 import { estimateDifficulty } from './difficultyEstimator';
 import { serializeOverlay } from './overlayParser';
 import {
-    FrontierPerson, OverlayState, PersonFlag, LifeRange,
-    SortField, SortDir, DEFAULT_UI_STATE, DifficultyCategory
+    FrontierPerson, OverlayState, PersonFlag, PersonOverride, LifeRange,
+    SortField, SortDir, PlaceFilter, PeriodFilter, SourceFilter, DEFAULT_UI_STATE, DifficultyCategory
 } from './types';
 import { t } from '../i18n';
 
 const STYLES_ID = 'gen-research-styles';
 
 const CSS = `
-.gen-research-controls { display: flex; gap: 8px; margin-bottom: 6px; align-items: center; flex-wrap: wrap; font-size: 0.85em; }
+.gen-research-controls-wrap { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.gen-research-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 0.85em; }
 .gen-research-filter-label { cursor: pointer; user-select: none; }
 .gen-research-summary { font-size: 0.82em; color: var(--text-muted); margin: 0 0 6px 0; }
 .gen-research-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
@@ -50,6 +51,13 @@ const CSS = `
 .gen-research-pin-btn { opacity: 0.35; background: none; border: none; cursor: pointer; padding: 0; font-size: 1em; line-height: 1; }
 .gen-research-pin-btn.pinned { opacity: 1; }
 .gen-research-assess-select { margin-left: 6px; font-size: 0.85em; padding: 2px 4px; background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: 3px; color: var(--text-normal); }
+.gen-research-filter-group { display: inline-flex; align-items: center; gap: 4px; }
+.gen-research-filter-label-text { color: var(--text-muted); white-space: nowrap; font-size: 0.9em; }
+.gen-research-seg-group { display: inline-flex; border-radius: 4px; overflow: hidden; border: 1px solid var(--background-modifier-border); }
+.gen-research-seg-btn { padding: 2px 8px; cursor: pointer; border: none; border-right: 1px solid var(--background-modifier-border); background: var(--background-primary); color: var(--text-normal); font-size: 0.82em; line-height: 1.6; }
+.gen-research-seg-btn:last-child { border-right: none; }
+.gen-research-seg-btn.active { background: var(--interactive-accent); color: var(--text-on-accent); }
+.gen-research-seg-btn:hover:not(.active) { background: var(--background-modifier-hover); }
 .gen-research-root-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 0.85em; }
 .gen-research-root-label { white-space: nowrap; color: var(--text-muted); }
 .gen-research-root-input { flex: 1; max-width: 260px; padding: 3px 6px; background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: 3px; color: var(--text-normal); font-size: 0.85em; }
@@ -136,7 +144,13 @@ export interface GenResearchPanelOptions {
     getSourceStatus: (personId: string, sourceName: string) => SourceStatus;
     setSourceStatus: (personId: string, sourceName: string, status: SourceStatus) => Promise<void>;
     getStatusEmoji: (status: SourceStatus) => string;
-    /** Called when persistent state (flags, note links) changes. */
+    getNoteLink: (personId: string) => string;
+    saveNoteLink: (personId: string, link: string) => Promise<void>;
+    getPersonFlags: (personId: string) => Set<PersonFlag>;
+    savePersonFlags: (personId: string, flags: Set<PersonFlag>) => Promise<void>;
+    getDifficultyOverride: (personId: string) => DifficultyCategory | undefined;
+    saveDifficultyOverride: (personId: string, override: DifficultyCategory | undefined) => Promise<void>;
+    /** Called when UI state (sort, filter, root, expanded) changes. */
     onSave: (overlay: OverlayState) => Promise<void>;
     sourcePath?: string;
 }
@@ -151,6 +165,12 @@ export class GenResearchPanel {
     private readonly getSourceStatus: (personId: string, sourceName: string) => SourceStatus;
     private readonly setSourceStatus: (personId: string, sourceName: string, status: SourceStatus) => Promise<void>;
     private readonly getStatusEmoji: (status: SourceStatus) => string;
+    private readonly getNoteLink: (personId: string) => string;
+    private readonly saveNoteLink: (personId: string, link: string) => Promise<void>;
+    private readonly getPersonFlags: (personId: string) => Set<PersonFlag>;
+    private readonly savePersonFlags: (personId: string, flags: Set<PersonFlag>) => Promise<void>;
+    private readonly getDifficultyOverride: (personId: string) => DifficultyCategory | undefined;
+    private readonly saveDifficultyOverride: (personId: string, override: DifficultyCategory | undefined) => Promise<void>;
     private readonly onSave: (overlay: OverlayState) => Promise<void>;
     private readonly sourcePath: string;
 
@@ -158,11 +178,13 @@ export class GenResearchPanel {
     private sortDir: SortDir = DEFAULT_UI_STATE.sortDir;
     private filterHideIgnored = DEFAULT_UI_STATE.hideIgnored;
     private filterPinned = DEFAULT_UI_STATE.pinnedOnly;
-    private filterNoPlace = DEFAULT_UI_STATE.noPlaceOnly;
+    private filterPlaceFilter: PlaceFilter = DEFAULT_UI_STATE.placeFilter;
+    private filterPeriodFilter: PeriodFilter = DEFAULT_UI_STATE.periodFilter;
+    private filterSourceFilter: SourceFilter = DEFAULT_UI_STATE.sourceFilter;
     private expandedIds = new Set<string>();
     private rootId: string = '';
     private uiInitialized = false;
-    private lastOverlay: OverlayState = { ui: { ...DEFAULT_UI_STATE, expandedIds: [] }, persons: {} };
+    private lastOverlay: OverlayState = { ui: { ...DEFAULT_UI_STATE, expandedIds: [] } };
     private rules: Rule[] | null = null;
 
     constructor(options: GenResearchPanelOptions) {
@@ -175,6 +197,12 @@ export class GenResearchPanel {
         this.getSourceStatus = options.getSourceStatus;
         this.setSourceStatus = options.setSourceStatus;
         this.getStatusEmoji = options.getStatusEmoji;
+        this.getNoteLink = options.getNoteLink;
+        this.saveNoteLink = options.saveNoteLink;
+        this.getPersonFlags = options.getPersonFlags;
+        this.savePersonFlags = options.savePersonFlags;
+        this.getDifficultyOverride = options.getDifficultyOverride;
+        this.saveDifficultyOverride = options.saveDifficultyOverride;
         this.onSave = options.onSave;
         this.sourcePath = options.sourcePath ?? '';
     }
@@ -186,7 +214,9 @@ export class GenResearchPanel {
             this.sortDir = overlay.ui.sortDir;
             this.filterHideIgnored = overlay.ui.hideIgnored;
             this.filterPinned = overlay.ui.pinnedOnly;
-            this.filterNoPlace = overlay.ui.noPlaceOnly;
+            this.filterPlaceFilter = overlay.ui.placeFilter;
+            this.filterPeriodFilter = overlay.ui.periodFilter;
+            this.filterSourceFilter = overlay.ui.sourceFilter;
             this.expandedIds = new Set(overlay.ui.expandedIds.map(id => `@${id}@`));
             // Use saved rootId; auto-detect from GEDCOM is done lazily in renderContent()
             this.rootId = overlay.ui.rootId ?? '';
@@ -194,7 +224,7 @@ export class GenResearchPanel {
         }
         this.lastOverlay = overlay;
         this.container.empty();
-        this.renderContent(overlay);
+        this.renderContent();
     }
 
     /** Re-render preserving current in-memory UI state (e.g. on GEDCOM reload). */
@@ -202,42 +232,39 @@ export class GenResearchPanel {
         this.rules = null; // force reload from vault on next render
         this.lastOverlay = overlay;
         this.container.empty();
-        this.renderContent(overlay);
+        this.renderContent();
     }
 
     private rerenderCurrent(): void {
         this.container.empty();
-        this.renderContent(this.lastOverlay);
+        this.renderContent();
     }
 
-    /** Update lastOverlay, rerender immediately, then persist. Use for ALL state-mutating actions. */
-    private async saveAndRerender(persons: OverlayState['persons']): Promise<void> {
-        const newOverlay = this.buildCurrentOverlay(persons);
-        this.lastOverlay = newOverlay;   // must happen before rerenderCurrent
+    /** Persist UI state, then rerender. Use for sort/filter/root changes. */
+    private async rerenderAndSave(): Promise<void> {
+        const newOverlay = this.buildCurrentOverlay();
+        this.lastOverlay = newOverlay;
         this.rerenderCurrent();
         await this.onSave(newOverlay);
     }
 
-    private async rerenderAndSave(): Promise<void> {
-        await this.saveAndRerender(this.lastOverlay.persons);
-    }
-
-    private buildCurrentOverlay(persons: OverlayState['persons']): OverlayState {
+    private buildCurrentOverlay(): OverlayState {
         return {
             ui: {
                 sortField: this.sortField,
                 sortDir: this.sortDir,
                 hideIgnored: this.filterHideIgnored,
                 pinnedOnly: this.filterPinned,
-                noPlaceOnly: this.filterNoPlace,
+                placeFilter: this.filterPlaceFilter,
+                periodFilter: this.filterPeriodFilter,
+                sourceFilter: this.filterSourceFilter,
                 expandedIds: [...this.expandedIds].map(id => id.replace(/@/g, '')),
                 rootId: this.rootId || undefined,
             },
-            persons,
         };
     }
 
-    private buildPersonData(overlay: OverlayState, rules: Rule[]): FrontierPerson[] {
+    private buildPersonData(rules: Rule[]): FrontierPerson[] {
         const frontierIndividuals = detectFrontierAncestors(this.gedcomService, this.rootId || undefined)
             .filter((p): p is NonNullable<typeof p> => p != null);
 
@@ -264,14 +291,23 @@ export class GenResearchPanel {
 
             const sources = matchSources(individual, lifeRange, rules);
             const rawId = individual.id.replace(/@/g, '');
-            const override = overlay.persons[rawId];
+            const override: PersonOverride = {
+                flags: this.getPersonFlags(rawId),
+                difficultyOverride: this.getDifficultyOverride(rawId),
+            };
             const difficulty = estimateDifficulty(lifeRange, sources, hasPlace, override);
+            const activeSourceCount = sources.filter(s => {
+                const st = this.getSourceStatus(rawId, s.name);
+                return st === 0 || st === 1 || st === 2;
+            }).length;
+            const spouses = this.getSpousesOf(individual);
+            const bloodDescendant = this.findBloodDescendant(rawId);
 
-            return { individual, lifeRange, hasPlace, firstEvent, sources, difficulty, override };
+            return { individual, lifeRange, hasPlace, firstEvent, sources, activeSourceCount, spouses, bloodDescendant, difficulty, override };
         });
     }
 
-    private renderContent(overlay: OverlayState): void {
+    private renderContent(): void {
         this.ensureStyles();
 
         if (!this.gedcomService.getIsDataLoaded()) {
@@ -357,19 +393,51 @@ export class GenResearchPanel {
             this.container.createEl('p', { text: t('research.noRootWarning'), cls: 'gen-research-warning' });
         }
 
-        const persons = this.buildPersonData(overlay, this.rules ?? []);
+        const persons = this.buildPersonData(this.rules ?? []);
 
-        const controls = this.container.createDiv({ cls: 'gen-research-controls' });
-        this.addFilterCheckbox(controls, t('research.filterPinned'), this.filterPinned, v => {
+        const controlsWrap = this.container.createDiv({ cls: 'gen-research-controls-wrap' });
+
+        const row1 = controlsWrap.createDiv({ cls: 'gen-research-controls' });
+        this.addFilterCheckbox(row1, t('research.filterPinned'), this.filterPinned, v => {
             this.filterPinned = v;
             this.rerenderAndSave();
         });
-        this.addFilterCheckbox(controls, t('research.filterNoPlace'), this.filterNoPlace, v => {
-            this.filterNoPlace = v;
+        this.addFilterCheckbox(row1, t('research.filterHideIgnored'), this.filterHideIgnored, v => {
+            this.filterHideIgnored = v;
             this.rerenderAndSave();
         });
-        this.addFilterCheckbox(controls, t('research.filterHideIgnored'), this.filterHideIgnored, v => {
-            this.filterHideIgnored = v;
+
+        const row2 = controlsWrap.createDiv({ cls: 'gen-research-controls' });
+        row2.createSpan({ text: t('research.sourceLabel'), cls: 'gen-research-filter-label-text' });
+        this.addSegmentedGroup<SourceFilter>(row2, [
+            { value: 'all',         label: t('research.sourceAll') },
+            { value: 'has-sources', label: t('research.sourceHas') },
+            { value: 'no-sources',  label: t('research.sourceNo') },
+        ], this.filterSourceFilter, v => {
+            this.filterSourceFilter = v;
+            this.rerenderAndSave();
+        });
+
+        const row3 = controlsWrap.createDiv({ cls: 'gen-research-controls' });
+        row3.createSpan({ text: t('research.placeLabel'), cls: 'gen-research-filter-label-text' });
+        this.addSegmentedGroup<PlaceFilter>(row3, [
+            { value: 'all',       label: t('research.placeAll') },
+            { value: 'no-place',  label: t('research.placeNo') },
+            { value: 'has-place', label: t('research.placeYes') },
+        ], this.filterPlaceFilter, v => {
+            this.filterPlaceFilter = v;
+            this.rerenderAndSave();
+        });
+
+        const row4 = controlsWrap.createDiv({ cls: 'gen-research-controls' });
+        row4.createSpan({ text: t('research.periodLabel'), cls: 'gen-research-filter-label-text' });
+        this.addSegmentedGroup<PeriodFilter>(row4, [
+            { value: 'all',       label: t('research.periodAll') },
+            { value: 'no-period', label: t('research.periodNone') },
+            { value: 'estimated', label: t('research.periodEst') },
+            { value: 'has-exact', label: t('research.periodExact') },
+        ], this.filterPeriodFilter, v => {
+            this.filterPeriodFilter = v;
             this.rerenderAndSave();
         });
 
@@ -393,7 +461,7 @@ export class GenResearchPanel {
             { label: t('research.colLifeRange'), field: 'lifeRange' },
             { label: t('research.colFirstEvent'), field: null },
             { label: t('research.colPlace'), field: null },
-            { label: t('research.colDifficulty'), field: 'difficulty' },
+            { label: t('research.colSources'), field: 'sources' },
             { label: '', field: null },
         ];
 
@@ -419,14 +487,14 @@ export class GenResearchPanel {
 
         const tbody = table.createEl('tbody');
         for (const fp of sorted) {
-            this.renderRow(tbody, fp, overlay);
+            this.renderRow(tbody, fp);
             if (this.expandedIds.has(fp.individual.id)) {
-                this.renderExpandedCard(tbody, fp, overlay);
+                this.renderExpandedCard(tbody, fp);
             }
         }
     }
 
-    private renderRow(tbody: HTMLElement, fp: FrontierPerson, overlay: OverlayState): void {
+    private renderRow(tbody: HTMLElement, fp: FrontierPerson): void {
         const rawId = fp.individual.id.replace(/@/g, '');
         const isPinned = fp.override?.flags?.has('pinned') ?? false;
 
@@ -447,11 +515,7 @@ export class GenResearchPanel {
                 || '—'
         });
 
-        const diffCell = row.createEl('td');
-        diffCell.createEl('span', {
-            cls: `gen-research-diff gen-research-diff-${fp.difficulty.category}`,
-            text: t(`research.diff${fp.difficulty.category === 'green' ? 'Low' : fp.difficulty.category === 'yellow' ? 'Med' : 'High'}`)
-        });
+        row.createEl('td', { text: fp.activeSourceCount > 0 ? String(fp.activeSourceCount) : '—' });
 
         const pinBtn = row.createEl('td').createEl('button', {
             cls: 'gen-research-pin-btn' + (isPinned ? ' pinned' : ''),
@@ -460,11 +524,10 @@ export class GenResearchPanel {
         });
         pinBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
-            const newOverlay = this.cloneOverlay(this.lastOverlay);
-            if (!newOverlay.persons[rawId]) newOverlay.persons[rawId] = { flags: new Set<PersonFlag>() };
-            const flags = newOverlay.persons[rawId].flags;
+            const flags = new Set(fp.override?.flags ?? []);
             if (flags.has('pinned')) flags.delete('pinned'); else flags.add('pinned');
-            await this.saveAndRerender(newOverlay.persons);
+            await this.savePersonFlags(rawId, flags);
+            this.rerenderCurrent();
         });
 
         row.addEventListener('click', () => {
@@ -474,7 +537,7 @@ export class GenResearchPanel {
         });
     }
 
-    private renderExpandedCard(tbody: HTMLElement, fp: FrontierPerson, overlay: OverlayState): void {
+    private renderExpandedCard(tbody: HTMLElement, fp: FrontierPerson): void {
         const rawId = fp.individual.id.replace(/@/g, '');
         const cardCell = tbody.createEl('tr', { cls: 'gen-research-card-row' }).createEl('td');
         cardCell.setAttribute('colspan', '6');
@@ -485,6 +548,21 @@ export class GenResearchPanel {
         summary.appendText(` · ${this.formatLifeRange(fp.lifeRange)}`);
         if (fp.firstEvent) summary.appendText(` · ${fp.firstEvent.type}${fp.firstEvent.date ? ' ' + fp.firstEvent.date : ''}`);
         summary.appendText(` · ${fp.individual.id}`);
+
+        if (fp.spouses.length > 0) {
+            const spouseDiv = card.createDiv({ cls: 'gen-research-card-section' });
+            spouseDiv.createEl('strong', { text: t('research.cardSpouses') });
+            const ul = spouseDiv.createEl('ul');
+            for (const spouse of fp.spouses) {
+                ul.createEl('li', { text: this.formatPersonBrief(spouse) });
+            }
+        }
+
+        if (fp.bloodDescendant) {
+            const descDiv = card.createDiv({ cls: 'gen-research-card-section' });
+            descDiv.createEl('strong', { text: t('research.cardBloodDescendant') });
+            descDiv.appendText(' ' + this.formatPersonBrief(fp.bloodDescendant));
+        }
 
         const srcDiv = card.createDiv({ cls: 'gen-research-card-section' });
         if (fp.sources.length > 0) {
@@ -516,30 +594,6 @@ export class GenResearchPanel {
             srcDiv.appendText(t('research.cardNoSources'));
         }
 
-        // Assessment dropdown — user's own difficulty override
-        const assessDiv = card.createDiv({ cls: 'gen-research-card-section' });
-        assessDiv.createEl('strong', { text: t('research.cardAssessment') });
-        const assessSelect = assessDiv.createEl('select', { cls: 'gen-research-assess-select' });
-        const assessOptions: Array<{ value: string; label: string }> = [
-            { value: '',       label: t('research.assessmentAuto') },
-            { value: 'green',  label: t('research.assessmentLow') },
-            { value: 'yellow', label: t('research.assessmentMed') },
-            { value: 'red',    label: t('research.assessmentHigh') },
-        ];
-        for (const opt of assessOptions) {
-            const optEl = assessSelect.createEl('option', { value: opt.value, text: opt.label });
-            if ((fp.override?.difficultyOverride ?? '') === opt.value) optEl.selected = true;
-        }
-        assessSelect.addEventListener('change', async () => {
-            const newOverlay = this.cloneOverlay(this.lastOverlay);
-            if (!newOverlay.persons[rawId]) {
-                newOverlay.persons[rawId] = { flags: new Set<PersonFlag>() };
-            }
-            const val = assessSelect.value as DifficultyCategory | '';
-            newOverlay.persons[rawId].difficultyOverride = val || undefined;
-            await this.saveAndRerender(newOverlay.persons);
-        });
-
         const flagsDiv = card.createDiv({ cls: 'gen-research-card-section' });
         flagsDiv.createEl('strong', { text: t('research.cardFlags') });
         const flagDefs: Array<{ flag: PersonFlag; label: string }> = [
@@ -553,15 +607,11 @@ export class GenResearchPanel {
             cb.checked = fp.override?.flags?.has(flag) ?? false;
             lbl.appendText(' ' + label);
             cb.addEventListener('change', async () => {
-                const newOverlay = this.cloneOverlay(this.lastOverlay);
-                if (!newOverlay.persons[rawId]) {
-                    newOverlay.persons[rawId] = { flags: new Set<PersonFlag>() };
-                } else {
-                    newOverlay.persons[rawId] = { ...newOverlay.persons[rawId], flags: new Set(newOverlay.persons[rawId].flags) };
-                }
-                if (cb.checked) newOverlay.persons[rawId].flags.add(flag);
-                else newOverlay.persons[rawId].flags.delete(flag);
-                await this.saveAndRerender(newOverlay.persons);
+                const flags = new Set(fp.override?.flags ?? []);
+                if (cb.checked) flags.add(flag);
+                else flags.delete(flag);
+                await this.savePersonFlags(rawId, flags);
+                this.rerenderCurrent();
             });
         }
 
@@ -570,7 +620,7 @@ export class GenResearchPanel {
         const noteRow = noteLinkDiv.createDiv({ cls: 'gen-research-note-row' });
         const noteInput = noteRow.createEl('input', { cls: 'gen-research-note-input' });
         noteInput.type = 'text';
-        noteInput.value = fp.override?.noteLink || '';
+        noteInput.value = this.getNoteLink(rawId);
         noteInput.placeholder = t('research.cardNoteLinkPlaceholder');
 
         new NoteSuggest(this.app, noteInput);
@@ -588,18 +638,58 @@ export class GenResearchPanel {
             if (path) this.app.workspace.openLinkText(path, this.sourcePath);
         });
         noteInput.addEventListener('blur', async () => {
-            const current = this.lastOverlay.persons[rawId]?.noteLink || '';
+            const current = this.getNoteLink(rawId);
             const next = noteInput.value.trim();
             if (next === current) return;
-            const newOverlay = this.cloneOverlay(this.lastOverlay);
-            if (!newOverlay.persons[rawId]) {
-                newOverlay.persons[rawId] = { flags: new Set<PersonFlag>() };
-            } else {
-                newOverlay.persons[rawId] = { ...newOverlay.persons[rawId], flags: new Set(newOverlay.persons[rawId].flags) };
-            }
-            newOverlay.persons[rawId].noteLink = next || undefined;
-            await this.saveAndRerender(newOverlay.persons);
+            await this.saveNoteLink(rawId, next);
+            this.rerenderCurrent();
         });
+    }
+
+    private getSpousesOf(individual: import('../gedcom/types').GedcomIndividual): import('../gedcom/types').GedcomIndividual[] {
+        const spouses: import('../gedcom/types').GedcomIndividual[] = [];
+        for (const familyId of individual.familiesAsSpouse || []) {
+            const family = this.gedcomService.getFamily(familyId);
+            if (!family) continue;
+            const otherSpouseId = family.husbandId === individual.id ? family.wifeId : family.husbandId;
+            if (otherSpouseId) {
+                const spouse = this.gedcomService.getIndividual(otherSpouseId);
+                if (spouse) spouses.push(spouse);
+            }
+        }
+        return spouses;
+    }
+
+    private findBloodDescendant(frontierRawId: string): import('../gedcom/types').GedcomIndividual | null {
+        if (!this.rootId) return null;
+        const visited = new Set<string>();
+        const queue: string[] = [this.rootId];
+        while (queue.length > 0) {
+            const currentRawId = queue.shift()!;
+            if (visited.has(currentRawId)) continue;
+            visited.add(currentRawId);
+            const individual = this.gedcomService.getIndividual(currentRawId);
+            if (!individual) continue;
+            for (const familyId of individual.familiesAsChild || []) {
+                const family = this.gedcomService.getFamily(familyId);
+                if (!family) continue;
+                for (const parentId of [family.husbandId, family.wifeId]) {
+                    if (!parentId) continue;
+                    const rawParentId = parentId.replace(/@/g, '');
+                    if (rawParentId === frontierRawId) return individual;
+                    if (!visited.has(rawParentId)) queue.push(rawParentId);
+                }
+            }
+        }
+        return null;
+    }
+
+    private formatPersonBrief(individual: import('../gedcom/types').GedcomIndividual): string {
+        const name = individual.name || individual.id;
+        const from = parseYear(individual.birthDate);
+        const to = parseYear(individual.deathDate);
+        if (from === null && to === null) return name;
+        return `${name} (${from ?? '?'}–${to ?? '?'})`;
     }
 
     private addFilterCheckbox(parent: HTMLElement, label: string, checked: boolean, onChange: (v: boolean) => void): void {
@@ -611,11 +701,42 @@ export class GenResearchPanel {
         cb.addEventListener('change', () => onChange(cb.checked));
     }
 
+    private addSegmentedGroup<T extends string>(
+        parent: HTMLElement,
+        options: Array<{ value: T; label: string; title?: string }>,
+        current: T,
+        onChange: (v: T) => void
+    ): void {
+        const group = parent.createDiv({ cls: 'gen-research-seg-group' });
+        for (const opt of options) {
+            const btn = group.createEl('button', {
+                cls: 'gen-research-seg-btn' + (current === opt.value ? ' active' : ''),
+                text: opt.label,
+            });
+            if (opt.title) btn.title = opt.title;
+            btn.addEventListener('click', () => onChange(opt.value));
+        }
+    }
+
     private sortAndFilter(persons: FrontierPerson[]): FrontierPerson[] {
         let result = persons;
         if (this.filterHideIgnored) result = result.filter(fp => !fp.override?.flags?.has('ignored'));
         if (this.filterPinned) result = result.filter(fp => fp.override?.flags?.has('pinned'));
-        if (this.filterNoPlace) result = result.filter(fp => !fp.hasPlace);
+
+        if (this.filterPlaceFilter === 'no-place') result = result.filter(fp => !fp.hasPlace);
+        else if (this.filterPlaceFilter === 'has-place') result = result.filter(fp => fp.hasPlace);
+
+        if (this.filterPeriodFilter === 'no-period') {
+            result = result.filter(fp => fp.lifeRange.from === null && fp.lifeRange.to === null);
+        } else if (this.filterPeriodFilter === 'estimated') {
+            result = result.filter(fp => fp.lifeRange.confidence === 'estimated' && (fp.lifeRange.from !== null || fp.lifeRange.to !== null));
+        } else if (this.filterPeriodFilter === 'has-exact') {
+            result = result.filter(fp => fp.lifeRange.confidence === 'exact');
+        }
+
+        if (this.filterSourceFilter === 'has-sources') result = result.filter(fp => fp.activeSourceCount > 0);
+        else if (this.filterSourceFilter === 'no-sources') result = result.filter(fp => fp.activeSourceCount === 0);
+
         const pinned = result.filter(fp => fp.override?.flags?.has('pinned'));
         const rest = result.filter(fp => !fp.override?.flags?.has('pinned'));
         const cmp = this.getComparator();
@@ -627,7 +748,7 @@ export class GenResearchPanel {
     private getComparator(): (a: FrontierPerson, b: FrontierPerson) => number {
         const dir = this.sortDir === 'asc' ? 1 : -1;
         switch (this.sortField) {
-            case 'difficulty': return (a, b) => dir * (a.difficulty.score - b.difficulty.score);
+            case 'sources': return (a, b) => dir * (a.activeSourceCount - b.activeSourceCount);
             case 'name': return (a, b) => dir * (a.individual.surname || a.individual.name || '').localeCompare(b.individual.surname || b.individual.name || '');
             case 'lifeRange': return (a, b) => dir * ((a.lifeRange.from ?? 9999) - (b.lifeRange.from ?? 9999));
         }
@@ -638,14 +759,6 @@ export class GenResearchPanel {
         const from = lr.from !== null ? String(lr.from) : '?';
         const to = lr.to !== null ? String(lr.to) : '?';
         return lr.confidence === 'estimated' ? `~${from}–${to}` : `${from}–${to}`;
-    }
-
-    private cloneOverlay(overlay: OverlayState): OverlayState {
-        const persons: OverlayState['persons'] = {};
-        for (const [id, ov] of Object.entries(overlay.persons)) {
-            persons[id] = { ...ov, flags: new Set(ov.flags) };
-        }
-        return { ui: { ...overlay.ui, expandedIds: [...overlay.ui.expandedIds] }, persons };
     }
 
     private ensureStyles(): void {

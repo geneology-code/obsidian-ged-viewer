@@ -1,24 +1,31 @@
 import { GedcomIndividual, GedcomEvent } from '../gedcom/types';
 
-export type SortField = 'difficulty' | 'name' | 'lifeRange';
+export type SortField = 'sources' | 'name' | 'lifeRange';
 export type SortDir = 'asc' | 'desc';
+export type PlaceFilter = 'all' | 'no-place' | 'has-place';
+export type PeriodFilter = 'all' | 'no-period' | 'estimated' | 'has-exact';
+export type SourceFilter = 'all' | 'has-sources' | 'no-sources';
 
 export interface UIState {
     sortField: SortField;
     sortDir: SortDir;
     hideIgnored: boolean;
     pinnedOnly: boolean;
-    noPlaceOnly: boolean;
+    placeFilter: PlaceFilter;
+    periodFilter: PeriodFilter;
+    sourceFilter: SourceFilter;
     expandedIds: string[]; // raw IDs without @, e.g. "I123"
     rootId?: string; // raw ID without @, e.g. "I1"
 }
 
 export const DEFAULT_UI_STATE: UIState = {
-    sortField: 'difficulty',
+    sortField: 'sources',
     sortDir: 'desc',
     hideIgnored: true,
     pinnedOnly: false,
-    noPlaceOnly: false,
+    placeFilter: 'all',
+    periodFilter: 'all',
+    sourceFilter: 'all',
     expandedIds: [],
     // rootId intentionally absent
 };
@@ -56,13 +63,11 @@ export const SOURCE_STATUSES: Record<SourceStatus, { emoji: string; labelKey: st
 
 export interface PersonOverride {
     flags: Set<PersonFlag>;
-    noteLink?: string; // path to Obsidian note, e.g. "Research/Ivanov.md"
     difficultyOverride?: DifficultyCategory;
 }
 
 export interface OverlayState {
     ui: UIState;
-    persons: Record<string, PersonOverride>;
 }
 
 export interface FrontierPerson {
@@ -71,6 +76,9 @@ export interface FrontierPerson {
     hasPlace: boolean;
     firstEvent: GedcomEvent | null; // earliest dated event
     sources: ResearchSource[];
+    activeSourceCount: number; // sources in status 0, 1, or 2
+    spouses: GedcomIndividual[];
+    bloodDescendant: GedcomIndividual | null; // direct child who is ancestor of root
     difficulty: Difficulty;
     override?: PersonOverride;
 }

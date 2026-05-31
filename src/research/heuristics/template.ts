@@ -8,6 +8,7 @@ export const DEFAULT_RULES_YAML = `# Правила подбора источн�
 #       rules: [...]                   # вложенные правила, необязательно
 #
 # Условия (листовые):
+#   always: true                       — всегда (безусловно)
 #   place_includes: 'строка'           — любое место содержит подстроку
 #   place_includes_any: ['а', 'б']     — любое место содержит хотя бы одну строку
 #   birth_place_includes: 'строка'     — только место рождения
@@ -33,29 +34,40 @@ rules:
       place_includes_any: ['Россия', 'Российская', 'РСФСР', 'Russia', 'USSR', 'Soviet']
     rules:
       - when:
-          alive_in: 1858
-        source: "10-я ревизия (1858)"
-      - when:
-          alive_in: 1834
-        source: "9-я ревизия (1834)"
-      - when:
-          alive_in: 1816
-        source: "8-я ревизия (1816)"
-      - when:
-          alive_in: 1795
-        source: "5-я ревизия (1795)"
-      - when:
-          born_before: 1917
-        source: "Метрические книги"
-      - when:
-          born_before: 1917
-        source: "Исповедные ведомости"
-      - when:
-          all:
-            - sex: M
-            - born_before: 1917
-        source: "Рекрутские наборы"
-      - when:
-          born_before: 1897
-        source: "I Всероссийская перепись (1897)"
+          alive_in_range: [862, 1917]
+        rules:
+          # Церковные документы — для всех кто жил в этот период
+          - when:
+              always: true
+            source: "Метрические книги"
+          - when:
+              always: true
+            source: "Исповедные ведомости"
+          # Переписи
+          - when:
+              alive_in: 1897
+            source: "I Всероссийская перепись (1897)"
+          # Ревизские сказки
+          - when:
+              alive_in_range: [1857, 1859]
+            source: "10-я ревизская сказка (1857-1859)"
+          - when:
+              alive_in: 1850
+            source: "9-я ревизская сказка (1850)"
+          - when:
+              alive_in_range: [1833, 1835]
+            source: "8-я ревизская сказка (1833-1835)"
+          - when:
+              alive_in_range: [1815, 1825]
+            source: "7-я ревизская сказка (1815-1825)"
+          - when:
+              alive_in: 1811
+            source: "6-я ревизская сказка (1811)"
+          - when:
+              alive_in_range: [1794, 1808]
+            source: "5-я ревизская сказка (1794-1808)"
+          # Военные документы
+          - when:
+              sex: M
+            source: "Рекрутские наборы"
 `;
