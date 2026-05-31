@@ -221,6 +221,8 @@ export class GedcomService {
         let deathDate: string | undefined;
         let deathPlace: string | undefined;
         let sex: string | undefined;
+        const occupations: string[] = [];
+        const nobilityTitles: string[] = [];
         const familiesAsSpouse: string[] = [];
         const familiesAsChild: string[] = [];
         const events: GedcomEvent[] = [];
@@ -333,6 +335,7 @@ export class GedcomService {
                 { method: 'getEventGraduation', type: 'Graduation' },
                 { method: 'getEventRetirement', type: 'Retirement' },
                 { method: 'getEventOther', type: 'Event' },
+                { method: 'getAttributeResidence', type: 'Residence' },
             ];
 
             for (const { method, type } of eventMethods) {
@@ -391,6 +394,24 @@ export class GedcomService {
         }
 
         try {
+            const occuSel = individual.getAttributeOccupation();
+            if (occuSel && occuSel.length > 0 && typeof occuSel.value === 'function') {
+                const values = occuSel.value();
+                const arr = Array.isArray(values) ? values : [values];
+                for (const v of arr) { if (v) occupations.push(String(v)); }
+            }
+        } catch (e) {}
+
+        try {
+            const titleSel = individual.getAttributeNobilityTitle();
+            if (titleSel && titleSel.length > 0 && typeof titleSel.value === 'function') {
+                const values = titleSel.value();
+                const arr = Array.isArray(values) ? values : [values];
+                for (const v of arr) { if (v) nobilityTitles.push(String(v)); }
+            }
+        } catch (e) {}
+
+        try {
             // Get families as spouse
             const spouseSelection = individual.getFamilyAsSpouse();
             if (spouseSelection != null && spouseSelection.length > 0) {
@@ -436,6 +457,8 @@ export class GedcomService {
             deathDate,
             deathPlace,
             sex,
+            occupations,
+            nobilityTitles,
             familiesAsSpouse,
             familiesAsChild,
             events

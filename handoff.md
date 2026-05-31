@@ -95,7 +95,7 @@ src/
 - Файл правил хранится в vault, путь в настройках (`heuristicsFilePath`)
 - Кэш в `loader.ts` по пути файла (`invalidateRulesCache()` при смене пути)
 - Поддерживаемые условия — см. таблицу ниже
-- Кнопка "Создать шаблон" генерирует `DEFAULT_RULES_YAML` (Россия, ревизии + церковные книги)
+- Кнопка "Создать шаблон" генерирует `DEFAULT_RULES_YAML` (Россия, сословная развилка: дворянство / духовенство / купечество / мещанство / казачество / крестьянство по OCCU/TITL)
 
 **Система статусов источников:**
 - 6 статусов: 💡📂🔍✅➖⛔ (индексы 0–5)
@@ -117,12 +117,34 @@ src/
 - `reproductiveAge: { maleMin, maleMax, femaleMin, femaleMax }` — для оценки жизненного диапазона
 - `sourceStatusEmojis: string[6]` — кастомные эмодзи статусов
 
-### После v1.1.0 — `always: true` условие (незакоммичено)
+### После v1.1.0 — расширение эвристик (незакоммичено)
 
-- `types.ts`: добавлен тип `Always = { always: boolean }`
-- `evaluator.ts`: первая проверка `if ('always' in cond) return cond.always;`
-- `template.ts`: шаблон использует `always: true` для безусловных правил (Метрические книги и т.д.)
-- Нужен для правил типа "при совпадении родителя — показать этот источник всегда"
+**Новые поля `GedcomIndividual` (`src/gedcom/types.ts`):**
+- `occupations?: string[]` — все значения OCCU из .ged (может быть несколько)
+- `nobilityTitles?: string[]` — все значения TITL из .ged
+
+**Извлечение в `service.ts`:**
+- `getAttributeOccupation()` и `getAttributeNobilityTitle()` из read-gedcom → все значения через `value()`
+- `getAttributeResidence()` добавлен в eventMethods loop → места проживания (RESI) теперь входят в `person.events` и `allPlaces`
+
+**`EvalContext` (`src/research/heuristics/types.ts`):**
+- `allOccupations` — все OCCU joined, lowercased
+- `allTitles` — все TITL joined, lowercased
+- `datedEvents: DatedEvent[]` — события с обоими полями (дата + место); `yearFrom`/`yearTo` из `read-gedcom.parseDate()` (правильно обрабатывает периоды "FROM 1850 TO 1917")
+
+**Новые условия (`src/research/heuristics/evaluator.ts`):**
+- `occu_include` / `has_occu` — по полю OCCU, case-insensitive
+- `title_include` / `has_title` — по полю TITL, case-insensitive
+- `always: true/false` — безусловное правило
+- `alive_at_in_range: [start, end, 'строка']` — конкретное событие с датой В диапазоне И местом с подстрокой (не lifeRange, а реальные записи)
+- `place_regex` / `birth_place_regex` / `death_place_regex` — regex по местам
+- `occu_regex` / `title_regex` — regex по OCCU/TITL (все значения, any-семантика)
+
+**Regex-движок:** `parseRegexCondition('/паттерн/flags')` — стандартный JS-синтаксис. Без кавычек и в одинарных кавычках работает одинаково. Двойные кавычки нельзя для `\b\d\w` (YAML преобразует в управляющие символы). `\b` не работает с кириллицей (JS `\b` = ASCII); для границы слова: `/(?<!\p{L})паттерн(?!\p{L})/u`.
+
+**Шаблон правил** переработан на сословную развилку по OCCU/TITL для Российской империи:
+дворянство / духовенство / купечество / мещанство / казачество / крестьянство (default: `has_occu: false` и `has_title: false`).
+Источник: `new_rules.yaml` → `template.ts` → `showcase-obsidian/rules.yaml`.
 
 ---
 
@@ -212,9 +234,23 @@ rules:
 | `sex` | `M` или `F` |
 | `has_dates` | `true/false` |
 | `has_birth_place` | `true/false` |
+| `occu_include` | `'строка'` — поле OCCU (профессия) содержит подстроку, case-insensitive |
+| `has_occu` | `true/false` — поле OCCU заполнено |
+| `title_include` | `'строка'` — поле TITL (титул) содержит подстроку, case-insensitive |
+| `has_title` | `true/false` — поле TITL заполнено |
+| `alive_at_in_range` | `[start, end, 'строка']` — есть событие с датой в [start, end] **и** местом, содержащим строку; проверяет BIRT+DEAT+все events с обоими полями |
+| `place_regex` | `'/паттерн/i'` — любое место совпадает с regex; оригинальный регистр данных |
+| `birth_place_regex` | только birthPlace |
+| `death_place_regex` | только deathPlace |
+| `occu_regex` | `'/паттерн/i'` — любое OCCU значение |
+| `title_regex` | `'/паттерн/i'` — любое TITL значение |
 | `all` | `[условие, ...]` — AND |
 | `any` | `[условие, ...]` — OR |
 | `not` | условие |
+
+**Регистр:** все `*_include` и `alive_at_in_range` регистронезависимы (оба операнда приводятся к нижнему регистру). Условия `*_regex` тестируют **оригинальный** регистр данных — используй флаг `/i` для регистронезависимости.
+
+**Regex в YAML:** кавычки (отсутствие / одинарные / двойные) не влияют на результат для простых паттернов — `"/мещан/i"`, `'/мещан/i'` и `/мещан/i` идентичны. Кавычки обязательны если паттерн содержит `': '` (двоеточие+пробел) или `'#'` (иначе YAML ломается). **`\b` не работает с кириллицей** — JS `\b` ASCII-only; для границы слова: `/(?<!\p{L})мещан(?!\p{L})/u`.
 
 **Важно:** `alive_in_range: [a, b]` — проверяет **пересечение** диапазонов, не вхождение. Младенец 1900–1902 пересекает [862, 1917] → match. Человек 1915–1999 пересекает [862, 1917] → match. Оба правильно получат церковные документы.
 
@@ -291,14 +327,16 @@ git push origin --delete vX.Y.Z
 
 ## Текущее состояние (незакоммиченное)
 
-Изменения в `src/research/heuristics/` (always: true), showcase-файлах не закоммичены. Также untracked: `showcase-obsidian/rules.yaml` (файл правил для демо-vault).
+Все изменения незакоммичены. Untracked: `showcase-obsidian/rules.yaml`, `new_rules.yaml`, `test.yaml`.
 
-**Последние изменения (незакоммичены):**
+**Изменения в `src/research/` + `src/gedcom/`:**
 - Всё per-person состояние вынесено из overlay в `data.json`: `noteLinks`, `personFlags`, `difficultyOverrides`
-- Overlay хранит только `[ui]`; секции `[person:ID]` удалены; исправлен баг `saveSettings()` (теперь через `buildSavePayload()`)
+- Overlay хранит только `[ui]`; секции `[person:ID]` удалены
 - `GenResearchPanel` получил 6 callbacks для per-person данных
-- **Фильтры**: булев `noPlaceOnly` → три независимых сегментных фильтра (Место / Период / Источники); чекбоксы получили эмодзи 📌 ⛔; каждый фильтр на отдельной строке
-- **Таблица**: колонка «Сложность» заменена на «Источники» (кол-во активных, статус 0–2); сортировка по умолчанию `sources:desc`; backward compat: `sort=difficulty` → `sources`
-- **Карточка персоны**: добавлены секции «Супруг(и)» и «Кровный потомок»; убрана «Оценка» (difficulty override)
-- `FrontierPerson` получил поля: `activeSourceCount`, `spouses`, `bloodDescendant`
-- `GenResearchPanel`: методы `getSpousesOf()`, `findBloodDescendant()` (BFS вверх от root), `formatPersonBrief()`
+- **Фильтры**: три независимых сегментных фильтра (Место / Период / Источники)
+- **Таблица**: колонка «Источники» (кол-во активных 💡📂🔍); сортировка по умолчанию `sources:desc`
+- **Карточка**: секции «Супруг(и)» и «Кровный потомок»; `FrontierPerson.activeSourceCount/spouses/bloodDescendant`
+- `GedcomIndividual` получил `occupations?: string[]` и `nobilityTitles?: string[]`
+- `service.ts`: извлечение OCCU, TITL, RESI (getAttributeResidence теперь в eventMethods)
+- `heuristics/`: полная таблица условий — см. раздел выше; `EvalContext` расширен; шаблон правил переработан на сословную развилку
+- `test.yaml` в корне — артефакт тестирования YAML-парсинга regex, можно удалить

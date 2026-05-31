@@ -1,8 +1,58 @@
 import { ResearchSource } from '../types';
-import { Condition, EvalContext, Rule } from './types';
+import { Condition, DatedEvent, EvalContext, Rule } from './types';
 
 function allPlacesOf(ctx: EvalContext): string {
     return ctx.allPlaces;
+}
+
+// Parses YAML regex strings: /pattern/flags or bare pattern (defaults to case-insensitive).
+// Use single-quoted YAML strings to preserve backslashes: occu_regex: '/\bкрестьян\b/i'
+function parseRegexCondition(pattern: string): RegExp {
+    try {
+        const m = pattern.match(/^\/(.+)\/([a-z]*)$/s);
+        if (m) return new RegExp(m[1], m[2]);
+        return new RegExp(pattern);
+    } catch {
+        return /(?!)/; // never matches — invalid regex
+    }
+}
+
+function allEventPlaces(ctx: EvalContext): string[] {
+    return [
+        ctx.person.birthPlace,
+        ctx.person.deathPlace,
+        ...(ctx.person.events ?? []).map(e => e.place),
+    ].filter((p): p is string => !!p);
+}
+
+// Returns [yearFrom, yearTo] using read-gedcom's full GEDCOM date parser.
+// Handles punctual ("1917", "15 MAR 1856", "ABT 1800"),
+// period ("FROM 1850 TO 1917") and range ("BET 1850 AND 1917", "BEF 1900", "AFT 1800").
+function gedcomYearRange(dateStr: string): [number, number] | null {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const parsed = require('read-gedcom').parseDate(dateStr) as any;
+    if (!parsed?.hasDate) return null;
+    if (parsed.isDatePunctual) {
+        const y: number | undefined = parsed.date?.year?.value;
+        return y != null ? [y, y] : null;
+    }
+    if (parsed.isDatePeriod) {
+        const from: number | undefined = parsed.dateFrom?.year?.value;
+        const to: number | undefined = parsed.dateTo?.year?.value;
+        if (from != null && to != null) return [from, to];
+        if (from != null) return [from, from];
+        if (to != null) return [to, to];
+        return null;
+    }
+    if (parsed.isDateRange) {
+        const after: number | undefined = parsed.dateAfter?.year?.value;
+        const before: number | undefined = parsed.dateBefore?.year?.value;
+        if (after != null && before != null) return [after, before];
+        if (after != null) return [after, after];
+        if (before != null) return [before, before];
+        return null;
+    }
+    return null;
 }
 
 function evalCondition(cond: Condition, ctx: EvalContext): boolean {
@@ -60,6 +110,51 @@ function evalCondition(cond: Condition, ctx: EvalContext): boolean {
         return cond.has_birth_place ? has : !has;
     }
 
+    // --- Occupation ---
+    if ('occu_include' in cond) {
+        return ctx.allOccupations.includes(cond.occu_include.toLowerCase());
+    }
+    if ('has_occu' in cond) {
+        const has = ctx.allOccupations.length > 0;
+        return cond.has_occu ? has : !has;
+    }
+
+    // --- Nobility title ---
+    if ('title_include' in cond) {
+        return ctx.allTitles.includes(cond.title_include.toLowerCase());
+    }
+    if ('has_title' in cond) {
+        const has = ctx.allTitles.length > 0;
+        return cond.has_title ? has : !has;
+    }
+
+    // --- Dated place ---
+    if ('alive_at_in_range' in cond) {
+        const [start, end, placeSubstr] = cond.alive_at_in_range;
+        const needle = placeSubstr.toLowerCase();
+        return ctx.datedEvents.some(e => e.yearFrom <= end && e.yearTo >= start && e.place.includes(needle));
+    }
+
+    // --- Regex conditions (test original-case data; add /i flag for case-insensitive) ---
+    if ('place_regex' in cond) {
+        const rx = parseRegexCondition(cond.place_regex);
+        return allEventPlaces(ctx).some(p => rx.test(p));
+    }
+    if ('birth_place_regex' in cond) {
+        return !!ctx.person.birthPlace && parseRegexCondition(cond.birth_place_regex).test(ctx.person.birthPlace);
+    }
+    if ('death_place_regex' in cond) {
+        return !!ctx.person.deathPlace && parseRegexCondition(cond.death_place_regex).test(ctx.person.deathPlace);
+    }
+    if ('occu_regex' in cond) {
+        const rx = parseRegexCondition(cond.occu_regex);
+        return (ctx.person.occupations ?? []).some(o => rx.test(o));
+    }
+    if ('title_regex' in cond) {
+        const rx = parseRegexCondition(cond.title_regex);
+        return (ctx.person.nobilityTitles ?? []).some(t => rx.test(t));
+    }
+
     return false;
 }
 
@@ -80,5 +175,18 @@ export function buildContext(person: import('../../gedcom/types').GedcomIndividu
         ...(person.events ?? []).map(e => e.place),
     ].filter(Boolean).join(' ').toLowerCase();
 
-    return { person, lifeRange, allPlaces: places };
+    const allOccupations = (person.occupations ?? []).join(' ').toLowerCase();
+    const allTitles = (person.nobilityTitles ?? []).join(' ').toLowerCase();
+
+    const datedEvents: DatedEvent[] = [];
+    const pushIfDated = (dateStr: string | undefined, placeStr: string | undefined) => {
+        if (!dateStr || !placeStr) return;
+        const range = gedcomYearRange(dateStr);
+        if (range !== null) datedEvents.push({ yearFrom: range[0], yearTo: range[1], place: placeStr.toLowerCase() });
+    };
+    pushIfDated(person.birthDate, person.birthPlace);
+    pushIfDated(person.deathDate, person.deathPlace);
+    for (const evt of person.events ?? []) pushIfDated(evt.date, evt.place);
+
+    return { person, lifeRange, allPlaces: places, allOccupations, allTitles, datedEvents };
 }

@@ -10,6 +10,8 @@ export interface GedcomIndividual {
     deathDate?: string;
     deathPlace?: string;
     sex?: string;
+    occupations?: string[];
+    nobilityTitles?: string[];
     familiesAsSpouse?: string[]; // IDs of families where this person is a spouse
     familiesAsChild?: string[]; // IDs of families where this person is a child
     events?: GedcomEvent[];

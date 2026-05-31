@@ -637,9 +637,11 @@ gci: @I40@
     deathDate,       // "1855"
     deathPlace,      // "St. Petersburg"
     sex,             // "M" or "F"
+    occupations,     // ["Farmer"] — all OCCU values (may have multiple)
+    nobilityTitles,  // ["Duke"] — all TITL values
     familiesAsSpouse, // ["@F4@"] — families where person is a spouse
     familiesAsChild,  // ["@F469@"] — family where person is a child
-    events           // [{type, date, place}, ...] — all GEDCOM events
+    events           // [{type, date, place}, ...] — all events including RESI (residence)
 }
 ```
 
@@ -909,11 +911,23 @@ rules:
 | `sex` | `M` or `F` | Person's sex |
 | `has_dates` | `true/false` | Has at least one estimated date |
 | `has_birth_place` | `true/false` | Birth place is set |
+| `occu_include` | `'string'` | Any OCCU value contains substring (case-insensitive) |
+| `has_occu` | `true/false` | OCCU (occupation) field is populated |
+| `title_include` | `'string'` | Any TITL value contains substring (case-insensitive) |
+| `has_title` | `true/false` | TITL (nobility title) field is populated |
+| `alive_at_in_range` | `[start,end,'string']` | An event exists with date in [start,end] AND place containing substring |
+| `place_regex` | `'/pattern/i'` | Any place matches regex |
+| `birth_place_regex` | `'/pattern/i'` | Birth place only |
+| `death_place_regex` | `'/pattern/i'` | Death place only |
+| `occu_regex` | `'/pattern/i'` | Any OCCU value matches regex |
+| `title_regex` | `'/pattern/i'` | Any TITL value matches regex |
 | `all` | `[condition,...]` | All conditions (AND) |
 | `any` | `[condition,...]` | Any condition (OR) |
 | `not` | `condition` | Negate |
 
-**Create default template:** *Settings → Heuristics & Research → Heuristics rules file → Create template* — generates a pre-filled Russia rules file at the specified path.
+> **Regex in YAML:** `/pattern/` and `/pattern/i` work unquoted, single-quoted, or double-quoted. Quotes are only required if the pattern contains `: ` or `#`.
+
+**Create default template:** *Settings → Heuristics & Research → Heuristics rules file → Create template* — generates a pre-filled Russia rules file with an estate-based branching (nobility / clergy / merchants / townspeople / Cossacks / peasants by OCCU/TITL).
 
 ---
 
