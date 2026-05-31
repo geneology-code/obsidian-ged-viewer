@@ -131,6 +131,7 @@ src/
 - `allOccupations` — все OCCU joined, lowercased
 - `allTitles` — все TITL joined, lowercased
 - `datedEvents: DatedEvent[]` — события с обоими полями (дата + место); `yearFrom`/`yearTo` из `read-gedcom.parseDate()` (правильно обрабатывает периоды "FROM 1850 TO 1917")
+- `allPlaces` и `datedEvents` включают **рождения детей** персоны (через `getFamilyMembers`): место рождения ребёнка считается событием родителя. Это значит `place_includes`, `alive_at_in_range`, `has_dates` и все остальные условия автоматически работают по детям.
 
 **Новые условия (`src/research/heuristics/evaluator.ts`):**
 - `occu_include` / `has_occu` — по полю OCCU, case-insensitive

@@ -990,8 +990,11 @@ export class GedcomService {
             'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'
         };
 
-        // Формат: 1 JAN 1950 → 1950-01-01
-        const match = date.match(/^(\d{1,2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(\d{4})$/i);
+        // Strip GEDCOM date qualifiers (ABT, BEF, AFT, EST, CAL, circa etc.)
+        const stripped = date.replace(/^(ABT|BEF|AFT|EST|CAL|CIRCA|ABOUt|ABOUT)\s+/i, '').trim();
+
+        // Формат: 1 JAN 938 / 1 JAN 1950 → 938-08-01 / 1950-01-01
+        const match = stripped.match(/^(\d{1,2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(\d{3,4})$/i);
         if (match) {
             const day = match[1].padStart(2, '0');
             const month = monthMap[match[2].toUpperCase()];
@@ -999,26 +1002,26 @@ export class GedcomService {
             return `${year}-${month}-${day}`;
         }
 
-        // Формат: JAN 1950 → 1950-01
-        const match2 = date.match(/^(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(\d{4})$/i);
+        // Формат: JAN 938 / JAN 1950 → 938-01 / 1950-01
+        const match2 = stripped.match(/^(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(\d{3,4})$/i);
         if (match2) {
             const month = monthMap[match2[1].toUpperCase()];
             const year = match2[2];
             return `${year}-${month}`;
         }
 
-        // Формат: 1950 → 1950
-        if (/^\d{4}$/.test(date)) {
-            return date;
+        // Формат: 938 / 1950 → как есть
+        if (/^\d{3,4}$/.test(stripped)) {
+            return stripped;
         }
 
         // Формат: 1950-01-01 → оставляем как есть
-        if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-            return date;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(stripped)) {
+            return stripped;
         }
 
-        // Пытаемся извлечь год
-        const yearMatch = date.match(/\b(\d{4})\b/);
+        // Пытаемся извлечь год (3-4 цифры)
+        const yearMatch = stripped.match(/\b(\d{3,4})\b/);
         if (yearMatch) {
             return yearMatch[1];
         }

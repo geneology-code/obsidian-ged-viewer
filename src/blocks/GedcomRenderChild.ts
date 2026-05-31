@@ -267,7 +267,7 @@ export class GedHeurRenderer extends GedcomRenderChild {
         const individual = token ? this.gedcomService.getIndividual(token) : null;
         const rules = this.heuristicsFilePath ? await loadRules(this.app, this.heuristicsFilePath) : [];
         const lifeRange = individual ? estimateLifeRange(individual, this.gedcomService, this.maxLifespanYears, this.reproductiveAge) : null;
-        const sources = individual && lifeRange ? matchSources(individual, lifeRange, rules) : [];
+        const sources = individual && lifeRange ? matchSources(individual, lifeRange, rules, this.gedcomService) : [];
 
         this.containerEl.empty();
 

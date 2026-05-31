@@ -28,7 +28,6 @@ export type BirthPlaceRegex = { birth_place_regex: string };
 export type DeathPlaceRegex = { death_place_regex: string };
 export type OccuRegex = { occu_regex: string };
 export type TitleRegex = { title_regex: string };
-
 export type LeafCondition =
     | Always
     | PlaceIncludes
@@ -87,8 +86,8 @@ export interface DatedEvent {
 export interface EvalContext {
     person: GedcomIndividual;
     lifeRange: LifeRange;
-    allPlaces: string;          // all place fields joined, lowercased
+    allPlaces: string;          // all place fields joined, lowercased (includes children's birth places)
     allOccupations: string;     // all OCCU values joined, lowercased
     allTitles: string;          // all TITL values joined, lowercased
-    datedEvents: DatedEvent[];  // events with both year and place extracted
+    datedEvents: DatedEvent[];  // events with both year and place extracted (includes children's births)
 }

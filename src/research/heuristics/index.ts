@@ -10,8 +10,9 @@ export function matchSources(
     person: GedcomIndividual,
     lifeRange: LifeRange,
     rules: Rule[],
+    service?: import('../../gedcom/service').GedcomService,
 ): ResearchSource[] {
     if (rules.length === 0) return [];
-    const ctx = buildContext(person, lifeRange);
+    const ctx = buildContext(person, lifeRange, service);
     return collectSources(rules, ctx);
 }

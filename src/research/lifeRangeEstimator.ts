@@ -2,10 +2,11 @@ import { GedcomIndividual } from '../gedcom/types';
 import { GedcomService } from '../gedcom/service';
 import { LifeRange } from './types';
 import { ReproductiveAge, DEFAULT_REPRODUCTIVE_AGE } from '../types/settings';
+import { Logger } from '../utils/logger';
 
 export function parseYear(dateStr: string | undefined | null): number | null {
     if (!dateStr) return null;
-    const match = dateStr.match(/\b(\d{4})\b/);
+    const match = dateStr.match(/\b(\d{3,4})\b/);
     return match ? parseInt(match[1], 10) : null;
 }
 
@@ -16,23 +17,31 @@ export function estimateLifeRange(
     reproductiveAge: ReproductiveAge = DEFAULT_REPRODUCTIVE_AGE
 ): LifeRange {
     const currentYear = new Date().getFullYear();
+    const pid = person.id;
+    const pname = person.name || pid;
 
     const birthYear = parseYear(person.birthDate);
     const deathYear = parseYear(person.deathDate);
 
-    // --- Exact cases (unchanged) ---
+    Logger.debug(`[lifeRange] ${pname} | birthDate="${person.birthDate}" → ${birthYear} | deathDate="${person.deathDate}" → ${deathYear} | sex=${person.sex}`);
+
+    // --- Exact case (both dates known) ---
 
     if (birthYear !== null && deathYear !== null) {
-        return { from: birthYear, to: deathYear, confidence: 'exact' };
-    }
-    if (birthYear !== null) {
-        return { from: birthYear, to: Math.min(birthYear + maxLifespan, currentYear), confidence: 'estimated' };
-    }
-    if (deathYear !== null) {
-        return { from: deathYear - maxLifespan, to: deathYear, confidence: 'estimated' };
+        const r = { from: birthYear, to: deathYear, confidence: 'exact' as const };
+        Logger.debug(`[lifeRange] ${pname} → EXACT ${r.from}–${r.to}`);
+        return r;
     }
 
-    // --- Gather all reference points ---
+    // --- Birth year known: pin from, estimate to (children can't improve death estimate) ---
+
+    if (birthYear !== null) {
+        const r = { from: birthYear, to: Math.min(birthYear + maxLifespan, currentYear), confidence: 'estimated' as const };
+        Logger.debug(`[lifeRange] ${pname} → birth-only ${r.from}–${r.to}`);
+        return r;
+    }
+
+    // --- Constraint-based: no birth year; deathYear (if any) + events + children ---
 
     const eventYears = (person.events ?? [])
         .map(e => parseYear(e.date))
@@ -58,39 +67,50 @@ export function estimateLifeRange(
     const minRepro = isFemale ? reproductiveAge.femaleMin : reproductiveAge.maleMin;
     const maxRepro = isFemale ? reproductiveAge.femaleMax : reproductiveAge.maleMax;
 
+    Logger.debug(`[lifeRange] ${pname} | events=${eventYears.join(',')||'—'} firstEvent=${firstEvent} lastEvent=${lastEvent}`);
+    Logger.debug(`[lifeRange] ${pname} | firstChild=${firstChild} lastChild=${lastChild} | deathYear=${deathYear} | repro min=${minRepro} max=${maxRepro} maxLifespan=${maxLifespan}`);
+
     // Latest moment we know the person was definitely alive
     const knownAlive = [lastEvent, lastChild].filter((y): y is number => y !== null);
     const lastKnownAlive = knownAlive.length > 0 ? Math.max(...knownAlive) : null;
 
-    // --- Birth year (from) ---
-    //
-    // Upper bounds: born no later than
+    // --- Birth year upper bounds: born no later than... ---
     const birthUppers: number[] = [];
-    if (firstEvent !== null) birthUppers.push(firstEvent);
-    if (firstChild !== null) birthUppers.push(firstChild - minRepro);
+    if (deathYear !== null) birthUppers.push(deathYear);        // must be born before death
+    if (firstEvent !== null) birthUppers.push(firstEvent);      // must be born before first event
+    if (firstChild !== null) birthUppers.push(firstChild - minRepro); // born before first child minus minRepro
 
     if (birthUppers.length === 0) {
+        Logger.debug(`[lifeRange] ${pname} → NO DATA, null`);
         return { from: null, to: null, confidence: 'estimated' };
     }
 
     const birthUpper = Math.min(...birthUppers);
 
-    // Lower bound: born no earlier than (person wasn't older than maxLifespan when last known alive)
-    const birthLower = lastKnownAlive !== null
-        ? lastKnownAlive - maxLifespan
+    // --- Birth year lower bounds: born no earlier than... ---
+    const birthLowers: number[] = [];
+    if (deathYear !== null) birthLowers.push(deathYear - maxLifespan);    // couldn't outlive maxLifespan past death
+    if (lastKnownAlive !== null) birthLowers.push(lastKnownAlive - maxLifespan);
+    if (lastChild !== null) birthLowers.push(lastChild - maxRepro);
+
+    const birthLower = birthLowers.length > 0
+        ? Math.max(...birthLowers)
         : birthUpper - maxLifespan;
 
-    const from = birthLower <= birthUpper ? birthLower : birthUpper;
+    // from = earliest plausible birth; clamp if constraints contradict
+    const from = Math.min(birthLower, birthUpper);
 
-    // --- Death year (to) ---
-    //
-    // Upper bound: from + maxLifespan, capped at currentYear
-    const deathUpper = Math.min(from + maxLifespan, currentYear);
-
-    // Floor: person can't die before they were last known alive
-    const to = lastKnownAlive !== null
+    // --- Death year ---
+    // If actual death year known, use it directly; otherwise estimate from birth upper
+    const deathUpper = Math.min(birthUpper + maxLifespan, currentYear);
+    const toEstimated = lastKnownAlive !== null
         ? Math.max(deathUpper, Math.min(lastKnownAlive, currentYear))
         : deathUpper;
+    const to = deathYear !== null ? deathYear : toEstimated;
+
+    Logger.debug(`[lifeRange] ${pname} | birthUpper=${birthUpper} birthLower=${birthLower} → from=${from}`);
+    Logger.debug(`[lifeRange] ${pname} | lastKnownAlive=${lastKnownAlive} deathUpper=${deathUpper} → to=${to}${deathYear !== null ? ' (pinned by deathYear)' : ''}`);
+    Logger.debug(`[lifeRange] ${pname} → ESTIMATED ${from}–${to}`);
 
     return { from, to, confidence: 'estimated' };
 }

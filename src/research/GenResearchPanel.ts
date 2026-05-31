@@ -289,7 +289,7 @@ export class GenResearchPanel {
                   )
                 : null;
 
-            const sources = matchSources(individual, lifeRange, rules);
+            const sources = matchSources(individual, lifeRange, rules, this.gedcomService);
             const rawId = individual.id.replace(/@/g, '');
             const override: PersonOverride = {
                 flags: this.getPersonFlags(rawId),

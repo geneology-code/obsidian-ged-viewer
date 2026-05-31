@@ -168,12 +168,16 @@ export function collectSources(rules: Rule[], ctx: EvalContext): ResearchSource[
     return results;
 }
 
-export function buildContext(person: import('../../gedcom/types').GedcomIndividual, lifeRange: import('../types').LifeRange): EvalContext {
-    const places = [
+export function buildContext(
+    person: import('../../gedcom/types').GedcomIndividual,
+    lifeRange: import('../types').LifeRange,
+    service?: import('../../gedcom/service').GedcomService,
+): EvalContext {
+    const ownPlaceSources = [
         person.birthPlace,
         person.deathPlace,
         ...(person.events ?? []).map(e => e.place),
-    ].filter(Boolean).join(' ').toLowerCase();
+    ].filter(Boolean) as string[];
 
     const allOccupations = (person.occupations ?? []).join(' ').toLowerCase();
     const allTitles = (person.nobilityTitles ?? []).join(' ').toLowerCase();
@@ -188,5 +192,20 @@ export function buildContext(person: import('../../gedcom/types').GedcomIndividu
     pushIfDated(person.deathDate, person.deathPlace);
     for (const evt of person.events ?? []) pushIfDated(evt.date, evt.place);
 
-    return { person, lifeRange, allPlaces: places, allOccupations, allTitles, datedEvents };
+    // Include children's birth events as context for the parent
+    const childBirthPlaces: string[] = [];
+    if (service) {
+        try {
+            const fm = service.getFamilyMembers(person.id);
+            for (const child of fm.children ?? []) {
+                if (child.birthPlace) childBirthPlaces.push(child.birthPlace);
+                pushIfDated(child.birthDate, child.birthPlace);
+            }
+        } catch { /* no family data */ }
+    }
+
+    const allPlaceSources = [...ownPlaceSources, ...childBirthPlaces];
+    const allPlaces = allPlaceSources.join(' ').toLowerCase();
+
+    return { person, lifeRange, allPlaces, allOccupations, allTitles, datedEvents };
 }
