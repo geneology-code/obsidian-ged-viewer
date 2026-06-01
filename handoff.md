@@ -355,26 +355,7 @@ type SourceFilter = 'all' | 'has-sources' | 'no-sources'
 // 'has-sources': activeSourceCount > 0 (статусы 0–2)
 ```
 
----
-
-## Релиз
-
-```bash
-node scripts/version-bump.mjs   # обновляет manifest.json, versions.json, package.json
-git add manifest.json versions.json package.json
-git commit -m "chore: bump version to X.Y.Z"
-git tag vX.Y.Z
-git push && git push --tags
-# → GitHub Actions создаёт Release draft
-
-# Удалить тег (пересоздать релиз):
-git tag -d vX.Y.Z
-git push origin --delete vX.Y.Z
-```
-
----
-
-### После v1.1.5 — Экспорт диаграмм в SVG/PNG
+### После v1.1.5 — Экспорт диаграмм в SVG/PNG (commit f850cec)
 
 **Кнопки `.SVG` и `.PNG` в тулбаре диаграмм (`src/blocks/TopolaRenderer.ts`):**
 - Появляются при наведении на диаграмму (справа от zoom-кнопок), в отдельном div `.topola-export-controls`
@@ -400,6 +381,31 @@ Obsidian переопределяет шрифт topola через `.topola-svg 
 3. Специфичность `(0,2,1)` побеждает topola-CSS `(0,1,1)`, шрифт совпадает с измеренным
 
 **Новые i18n ключи:** `diagram.exportSvg`, `diagram.exportPng`, `diagram.exportSaved`, `diagram.exportFailed` (в `ru.ts` и `en.ts`).
+
+### После v1.1.5 — Уточнение шаблона правил эвристик
+
+Переработан `DEFAULT_RULES_YAML` в `src/research/heuristics/template.ts`:
+- Расширены списки OCCU/TITL для дворянства, духовенства, купечества, мещанства, казачества
+- Актуализированы временны́е диапазоны источников по сословиям
+- 93 правила (рекурсивно)
+- `showcase-obsidian/rules.yaml` синхронизирован с шаблоном
+
+---
+
+## Релиз
+
+```bash
+node scripts/version-bump.mjs   # обновляет manifest.json, versions.json, package.json
+git add manifest.json versions.json package.json
+git commit -m "chore: bump version to X.Y.Z"
+git tag vX.Y.Z
+git push && git push --tags
+# → GitHub Actions создаёт Release draft
+
+# Удалить тег (пересоздать релиз):
+git tag -d vX.Y.Z
+git push origin --delete vX.Y.Z
+```
 
 ---
 
