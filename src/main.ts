@@ -129,19 +129,19 @@ export default class GEDCOMPlugin extends Plugin {
 
 		// Topola diagram blocks
 		this.registerMarkdownCodeBlockProcessor('ged-diagram-ancestors', async (source, el, ctx) => {
-			await renderDiagramAncestorsBlock(source, el, ctx, this.gedcomService, this.settings.defaultDiagramGenerations);
+			await renderDiagramAncestorsBlock(source, el, ctx, this.gedcomService, this.settings.defaultDiagramGenerations, this.app);
 		});
 
 		this.registerMarkdownCodeBlockProcessor('ged-diagram-descendants', async (source, el, ctx) => {
-			await renderDiagramDescendantsBlock(source, el, ctx, this.gedcomService, this.settings.defaultDiagramGenerations);
+			await renderDiagramDescendantsBlock(source, el, ctx, this.gedcomService, this.settings.defaultDiagramGenerations, this.app);
 		});
 
 		this.registerMarkdownCodeBlockProcessor('ged-diagram-hourglass', async (source, el, ctx) => {
-			await renderDiagramHourglassBlock(source, el, ctx, this.gedcomService, this.settings.defaultDiagramGenerations);
+			await renderDiagramHourglassBlock(source, el, ctx, this.gedcomService, this.settings.defaultDiagramGenerations, this.app);
 		});
 
 		this.registerMarkdownCodeBlockProcessor('ged-diagram-relatives', async (source, el, ctx) => {
-			await renderDiagramRelativesBlock(source, el, ctx, this.gedcomService, this.settings.defaultDiagramGenerations);
+			await renderDiagramRelativesBlock(source, el, ctx, this.gedcomService, this.settings.defaultDiagramGenerations, this.app);
 		});
 
 		this.registerMarkdownCodeBlockProcessor('ged-research', async (source, el, ctx) => {

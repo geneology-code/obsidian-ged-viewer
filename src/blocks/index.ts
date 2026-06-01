@@ -122,9 +122,10 @@ export async function renderDiagramAncestorsBlock(
     el: HTMLElement,
     ctx: MarkdownPostProcessorContext,
     gedcomService: GedcomService,
-    defaultGenerations: number = 3
+    defaultGenerations: number = 3,
+    app?: App
 ): Promise<void> {
-    createTopolaRenderer(source, el, ctx, gedcomService, 'ancestors', defaultGenerations);
+    createTopolaRenderer(source, el, ctx, gedcomService, 'ancestors', defaultGenerations, app);
 }
 
 /**
@@ -136,9 +137,10 @@ export async function renderDiagramDescendantsBlock(
     el: HTMLElement,
     ctx: MarkdownPostProcessorContext,
     gedcomService: GedcomService,
-    defaultGenerations: number = 3
+    defaultGenerations: number = 3,
+    app?: App
 ): Promise<void> {
-    createTopolaRenderer(source, el, ctx, gedcomService, 'descendants', defaultGenerations);
+    createTopolaRenderer(source, el, ctx, gedcomService, 'descendants', defaultGenerations, app);
 }
 
 /**
@@ -150,9 +152,10 @@ export async function renderDiagramHourglassBlock(
     el: HTMLElement,
     ctx: MarkdownPostProcessorContext,
     gedcomService: GedcomService,
-    defaultGenerations: number = 3
+    defaultGenerations: number = 3,
+    app?: App
 ): Promise<void> {
-    createTopolaRenderer(source, el, ctx, gedcomService, 'hourglass', defaultGenerations);
+    createTopolaRenderer(source, el, ctx, gedcomService, 'hourglass', defaultGenerations, app);
 }
 
 /**
@@ -164,9 +167,10 @@ export async function renderDiagramRelativesBlock(
     el: HTMLElement,
     ctx: MarkdownPostProcessorContext,
     gedcomService: GedcomService,
-    defaultGenerations: number = 3
+    defaultGenerations: number = 3,
+    app?: App
 ): Promise<void> {
-    createTopolaRenderer(source, el, ctx, gedcomService, 'relatives', defaultGenerations);
+    createTopolaRenderer(source, el, ctx, gedcomService, 'relatives', defaultGenerations, app);
 }
 
 /**

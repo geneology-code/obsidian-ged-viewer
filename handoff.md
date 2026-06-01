@@ -6,7 +6,11 @@ Obsidian-плагин для работы с `.ged` (GEDCOM) файлами ге
 
 **Версия:** 1.1.5  
 **Сборка:** `npm run build` → `main.js`  
-**Деплой в тест-vault:** `cp main.js showcase-obsidian/.obsidian/plugins/ged-viewer/main.js`
+**Деплой в тест-vault:**
+```bash
+cp main.js showcase-obsidian/.obsidian/plugins/ged-viewer/main.js
+cp styles.css showcase-obsidian/.obsidian/plugins/ged-viewer/styles.css
+```
 
 ---
 
@@ -20,6 +24,9 @@ Obsidian-плагин для работы с `.ged` (GEDCOM) файлами ге
 ```
 src/
 ├── main.ts                          — регистрация всего
+├── assets/
+│   ├── reload.svg                   — SVG иконка перезагрузки GEDCOM
+│   └── reloadIcon.ts                — RELOAD_ICON (экспорт строки SVG для addIcon)
 ├── gedcom/
 │   ├── service.ts                   — GedcomService: загрузка .ged, парсинг, getIndividual(), getFamilyMembers(), getAncestors()
 │   └── types.ts                     — GedcomIndividual, GedcomFamily, GedcomEvent
@@ -146,6 +153,47 @@ src/
 **Шаблон правил** переработан на сословную развилку по OCCU/TITL для Российской империи:
 дворянство / духовенство / купечество / мещанство / казачество / крестьянство (default: `has_occu: false` и `has_title: false`).
 Источник: `new_rules.yaml` → `template.ts` → `showcase-obsidian/rules.yaml`.
+
+### После v1.1.5 — Перезагрузка GEDCOM, отображение дат, копирование ID (commit d242e1d)
+
+**Перезагрузка GEDCOM:**
+- Новая ribbon-кнопка `gedcom-reload` — перезагружает `.ged` файл без перезапуска Obsidian
+- Новая команда палитры `reload-gedcom` ("Reload GEDCOM data")
+- Кнопка "Reload" рядом с полем пути к файлу в настройках
+- Метод `reloadGedcomData()` в `GEDCOMPlugin` — показывает `Notice` об успехе или ошибке
+- Иконка: `src/assets/reload.svg` + `src/assets/reloadIcon.ts` (RELOAD_ICON)
+
+**Исправление отображения расчётных дат (`lifeRangeEstimator.ts`, `types.ts`, `GenResearchPanel.ts`):**
+
+`LifeRange` получил два новых поля:
+```ts
+fromEstimated?: boolean  // true = рождение рассчитано, не из BIRT
+toEstimated?: boolean    // true = смерть рассчитана, не из DEAT
+```
+
+`estimateLifeRange` расставляет флаги по четырём случаям:
+
+| Случай | fromEstimated | toEstimated |
+|--------|--------------|------------|
+| Оба года точные | false | false |
+| Только рождение известно | false | true |
+| Только смерть известна (constraint) | true | false |
+| Нет данных / только события | true | true |
+
+`renderLifeRange(container, lr)` заменил `formatLifeRange(lr): string`:
+- Каждый расчётный год оборачивается в `<em>~год</em>` независимо
+- Точные года — plain text, без курсива
+- Примеры: `1850–`*`~1950`* / *`~1800`*`–1900` / *`~1800`*`–`*`~1950`*
+
+**Копирование ID в карточке персоны (`GenResearchPanel.ts`):**
+- Двойной клик на строке с именем/датами жизни → копирует ID персоны
+- Двойной клик на строке супруга → копирует ID супруга
+- Двойной клик на строке кровного потомка → копирует его ID
+- Показывает `new Notice('📋 ID: @I123@')`
+- Hover-подсветка на интерактивных строках (CSS `var(--background-modifier-hover)`)
+- Tooltip `title="Двойной щелчок — скопировать ID"` на всех интерактивных элементах
+- Новый i18n ключ: `research.dblclickCopyId`
+- Новые CSS классы: `gen-research-card-summary-line`, `gen-research-card-person-link`
 
 ---
 
@@ -323,6 +371,35 @@ git push && git push --tags
 git tag -d vX.Y.Z
 git push origin --delete vX.Y.Z
 ```
+
+---
+
+### После v1.1.5 — Экспорт диаграмм в SVG/PNG
+
+**Кнопки `.SVG` и `.PNG` в тулбаре диаграмм (`src/blocks/TopolaRenderer.ts`):**
+- Появляются при наведении на диаграмму (справа от zoom-кнопок), в отдельном div `.topola-export-controls`
+- Экспортируют **полную диаграмму** в натуральном размере (без текущего зума/пана)
+- Файл сохраняется в ту же папку, что и текущая заметка: `<ID>_<chartType>.svg` / `.png`
+- PNG: Canvas API, белый фон, 2× масштаб для чёткости
+- SVG: `XMLSerializer`, встроенный `<style>` с разрешёнными CSS-переменными
+- После сохранения показывается `Notice` с путём к файлу
+
+**Изменения архитектуры:**
+- `TopolaDiagramRenderer` теперь принимает `app?: App` (7-й параметр конструктора)
+- `createTopolaRenderer()`, все 4 `renderDiagram*Block()` в `src/blocks/index.ts` — добавлен параметр `app?: App`
+- `src/main.ts` передаёт `this.app` в каждую регистрацию диаграммного блока
+
+**CSS:** добавлен `.topola-export-controls { display: flex; gap: 4px; margin-left: 8px; }` в `styles.css`. Деплой теперь требует копировать и `styles.css` (см. выше).
+
+**SVG-экспорт — важный нюанс с шрифтами:**
+Obsidian переопределяет шрифт topola через `.topola-svg .detailed text { font-family: var(--font-interface) !important; }`. Topola измеряет ширину текстовых блоков уже с этим шрифтом. В standalone-SVG `--font-interface` не определён, а topola-CSS задаёт `Montserrat` → другие метрики → текст вылезает за рамки.
+
+Решение в `_buildExportSvgString()`:
+1. До клонирования читаем computed `fontFamily` у живого `.detailed text` элемента — это точный шрифт, с которым topola мерил блоки
+2. Добавляем `<style>` в конец SVG (после topola-CSS): `.topola-svg .detailed text { font-family: ${actualFont} !important; }`
+3. Специфичность `(0,2,1)` побеждает topola-CSS `(0,1,1)`, шрифт совпадает с измеренным
+
+**Новые i18n ключи:** `diagram.exportSvg`, `diagram.exportPng`, `diagram.exportSaved`, `diagram.exportFailed` (в `ru.ts` и `en.ts`).
 
 ---
 

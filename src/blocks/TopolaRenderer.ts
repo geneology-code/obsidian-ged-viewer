@@ -1,4 +1,4 @@
-import { MarkdownRenderChild, MarkdownPostProcessorContext } from 'obsidian';
+import { App, MarkdownRenderChild, MarkdownPostProcessorContext, Notice } from 'obsidian';
 import { GedcomService } from '../gedcom/service';
 import { createChart, DetailedRenderer, ChartColors, ChartHandle, ChartInfo } from 'topola';
 import { AncestorChart, DescendantChart, HourglassChart, RelativesChart } from 'topola';
@@ -339,6 +339,7 @@ export class TopolaDiagramRenderer extends MarkdownRenderChild {
     private static _fontLoaded = false; // Track font loading status
     private static _instanceCounter = 0;
 
+    private app!: App;
     private gedcomService: GedcomService;
     private source: string;
     private ctx: MarkdownPostProcessorContext;
@@ -365,6 +366,8 @@ export class TopolaDiagramRenderer extends MarkdownRenderChild {
     private zoomOutBtn: HTMLButtonElement | null = null;
     private fitToViewBtn: HTMLButtonElement | null = null;
     private focusOnRootBtn: HTMLButtonElement | null = null;
+    private exportSvgBtn: HTMLButtonElement | null = null;
+    private exportPngBtn: HTMLButtonElement | null = null;
 
     constructor(
         container: HTMLElement,
@@ -372,7 +375,8 @@ export class TopolaDiagramRenderer extends MarkdownRenderChild {
         gedcomService: GedcomService,
         ctx: MarkdownPostProcessorContext,
         chartType: TopolaChartType,
-        defaultGenerations: number = 3
+        defaultGenerations: number = 3,
+        app?: App
     ) {
         super(container);
         this.gedcomService = gedcomService;
@@ -380,6 +384,7 @@ export class TopolaDiagramRenderer extends MarkdownRenderChild {
         this.ctx = ctx;
         this.chartType = chartType;
         this.defaultGenerations = defaultGenerations;
+        if (app) this.app = app;
         const sourceHash = source.trim().replace(/@/g, '').replace(/\s+/g, '-').replace(/LVL:/g, '');
         const instanceId = ++TopolaDiagramRenderer._instanceCounter;
         this.uniqueId = `topola-${chartType}-${sourceHash}-${instanceId}`;
@@ -536,6 +541,19 @@ export class TopolaDiagramRenderer extends MarkdownRenderChild {
             attr: { 'aria-label': t('diagram.focusOnRoot') }
         });
 
+        // Export buttons
+        const exportControls = this.toolbarContainer.createDiv({ cls: 'topola-export-controls' });
+        this.exportSvgBtn = exportControls.createEl('button', {
+            cls: 'topola-zoom-btn',
+            text: '.SVG',
+            attr: { 'aria-label': t('diagram.exportSvg') }
+        });
+        this.exportPngBtn = exportControls.createEl('button', {
+            cls: 'topola-zoom-btn',
+            text: '.PNG',
+            attr: { 'aria-label': t('diagram.exportPng') }
+        });
+
         // Store reference for later access
         this.chartWrapper = svgContainer;
 
@@ -581,6 +599,16 @@ export class TopolaDiagramRenderer extends MarkdownRenderChild {
         this.focusOnRootBtn!.addEventListener('click', (e) => {
             e.stopPropagation();
             this._focusOnRoot();
+        });
+
+        this.exportSvgBtn!.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this._exportSvg();
+        });
+
+        this.exportPngBtn!.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this._exportPng();
         });
 
         // Zoom slider handler
@@ -1263,6 +1291,101 @@ export class TopolaDiagramRenderer extends MarkdownRenderChild {
         // Post-processing is now done in traverseGraph
         return result;
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // Export helpers
+    // ─────────────────────────────────────────────────────────────
+
+    private _exportFilename(ext: 'svg' | 'png'): string {
+        const folder = this.ctx.sourcePath.includes('/')
+            ? this.ctx.sourcePath.substring(0, this.ctx.sourcePath.lastIndexOf('/'))
+            : '';
+        const base = `${this.rootIndividualId || 'diagram'}_${this.chartType}.${ext}`;
+        return folder ? `${folder}/${base}` : base;
+    }
+
+    private _buildExportSvgString(): string {
+        // Read actual font BEFORE cloning — this is what topola used for text measurement.
+        // Obsidian's CSS overrides topola's Montserrat with --font-interface, so measurements
+        // were taken with that font. We must embed the same font in the standalone SVG.
+        const sampleText = this.svgElement!.querySelector('.detailed text');
+        const actualFont = sampleText
+            ? getComputedStyle(sampleText as Element).fontFamily
+            : (getComputedStyle(document.documentElement).getPropertyValue('--font-interface').trim() || 'sans-serif');
+
+        const svg = this.svgElement!.cloneNode(true) as SVGSVGElement;
+        const [w, h] = this.chartInfo!.size;
+
+        svg.style.transform = '';
+        svg.style.transformOrigin = '';
+        svg.setAttribute('width', String(w));
+        svg.setAttribute('height', String(h));
+        svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+        svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+        const cs = getComputedStyle(document.documentElement);
+        const textNormal = cs.getPropertyValue('--text-normal').trim() || '#1a1a1a';
+        const textMuted  = cs.getPropertyValue('--text-muted').trim()  || '#888888';
+
+        // Appended AFTER topola's bundled <style> so same-or-higher specificity wins.
+        // .topola-svg .detailed text (0,2,1) beats topola's .detailed text (0,1,1).
+        const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+        style.textContent = `
+            .topola-svg .detailed text { font-family: ${actualFont} !important; fill: ${textNormal}; }
+            .topola-svg .detailed .dates { fill: ${textMuted}; }
+            .topola-svg .detailed .id    { fill: ${textMuted}; }
+        `;
+        svg.appendChild(style);
+
+        return new XMLSerializer().serializeToString(svg);
+    }
+
+    private async _exportSvg(): Promise<void> {
+        if (!this.svgElement || !this.chartInfo || !this.app) return;
+        const svgString = this._buildExportSvgString();
+        const filename = this._exportFilename('svg');
+        try {
+            await this.app.vault.adapter.write(filename, svgString);
+            new Notice(t('diagram.exportSaved', { path: filename }));
+        } catch {
+            new Notice(t('diagram.exportFailed'));
+        }
+    }
+
+    private async _exportPng(): Promise<void> {
+        if (!this.svgElement || !this.chartInfo || !this.app) return;
+        const svgString = this._buildExportSvgString();
+        const [w, h] = this.chartInfo.size;
+        const SCALE = 2;
+
+        try {
+            const blob = await new Promise<Blob>((resolve, reject) => {
+                const img = new Image();
+                const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
+                const url = URL.createObjectURL(svgBlob);
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w * SCALE;
+                    canvas.height = h * SCALE;
+                    const ctx2d = canvas.getContext('2d')!;
+                    ctx2d.scale(SCALE, SCALE);
+                    ctx2d.fillStyle = '#ffffff';
+                    ctx2d.fillRect(0, 0, w, h);
+                    ctx2d.drawImage(img, 0, 0, w, h);
+                    URL.revokeObjectURL(url);
+                    canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob')), 'image/png');
+                };
+                img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('img load')); };
+                img.src = url;
+            });
+            const buffer = await blob.arrayBuffer();
+            const filename = this._exportFilename('png');
+            await this.app.vault.adapter.writeBinary(filename, buffer);
+            new Notice(t('diagram.exportSaved', { path: filename }));
+        } catch {
+            new Notice(t('diagram.exportFailed'));
+        }
+    }
 }
 
 /**
@@ -1274,9 +1397,10 @@ export function createTopolaRenderer(
     ctx: MarkdownPostProcessorContext,
     gedcomService: GedcomService,
     chartType: TopolaChartType,
-    defaultGenerations: number = 3
+    defaultGenerations: number = 3,
+    app?: App
 ): void {
-    const renderer = new TopolaDiagramRenderer(el, source, gedcomService, ctx, chartType, defaultGenerations);
+    const renderer = new TopolaDiagramRenderer(el, source, gedcomService, ctx, chartType, defaultGenerations, app);
 
     // Register in registry to get notified when GEDCOM is loaded
     gedcomService.getRendererRegistry().register({

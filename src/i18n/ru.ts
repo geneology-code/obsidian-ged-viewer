@@ -256,4 +256,8 @@ export const ru: Record<string, string> = {
     'diagram.zoomLevel': 'Уровень масштабирования',
     'diagram.fitToView': 'Показать всю диаграмму',
     'diagram.focusOnRoot': 'Фокус на персоне',
+    'diagram.exportSvg': 'Экспорт SVG',
+    'diagram.exportPng': 'Экспорт PNG',
+    'diagram.exportSaved': 'Сохранено: {path}',
+    'diagram.exportFailed': 'Ошибка экспорта',
 };

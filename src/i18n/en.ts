@@ -256,4 +256,8 @@ export const en: Record<string, string> = {
     'diagram.zoomLevel': 'Zoom level',
     'diagram.fitToView': 'Fit to view',
     'diagram.focusOnRoot': 'Focus on root person',
+    'diagram.exportSvg': 'Export SVG',
+    'diagram.exportPng': 'Export PNG',
+    'diagram.exportSaved': 'Saved: {path}',
+    'diagram.exportFailed': 'Export failed',
 };
