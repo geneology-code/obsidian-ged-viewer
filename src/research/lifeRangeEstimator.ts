@@ -28,7 +28,7 @@ export function estimateLifeRange(
     // --- Exact case (both dates known) ---
 
     if (birthYear !== null && deathYear !== null) {
-        const r = { from: birthYear, to: deathYear, confidence: 'exact' as const };
+        const r = { from: birthYear, to: deathYear, confidence: 'exact' as const, fromEstimated: false, toEstimated: false };
         Logger.debug(`[lifeRange] ${pname} → EXACT ${r.from}–${r.to}`);
         return r;
     }
@@ -36,7 +36,7 @@ export function estimateLifeRange(
     // --- Birth year known: pin from, estimate to (children can't improve death estimate) ---
 
     if (birthYear !== null) {
-        const r = { from: birthYear, to: Math.min(birthYear + maxLifespan, currentYear), confidence: 'estimated' as const };
+        const r = { from: birthYear, to: Math.min(birthYear + maxLifespan, currentYear), confidence: 'estimated' as const, fromEstimated: false, toEstimated: true };
         Logger.debug(`[lifeRange] ${pname} → birth-only ${r.from}–${r.to}`);
         return r;
     }
@@ -82,7 +82,7 @@ export function estimateLifeRange(
 
     if (birthUppers.length === 0) {
         Logger.debug(`[lifeRange] ${pname} → NO DATA, null`);
-        return { from: null, to: null, confidence: 'estimated' };
+        return { from: null, to: null, confidence: 'estimated', fromEstimated: true, toEstimated: true };
     }
 
     const birthUpper = Math.min(...birthUppers);
@@ -112,5 +112,5 @@ export function estimateLifeRange(
     Logger.debug(`[lifeRange] ${pname} | lastKnownAlive=${lastKnownAlive} deathUpper=${deathUpper} → to=${to}${deathYear !== null ? ' (pinned by deathYear)' : ''}`);
     Logger.debug(`[lifeRange] ${pname} → ESTIMATED ${from}–${to}`);
 
-    return { from, to, confidence: 'estimated' };
+    return { from, to, confidence: 'estimated', fromEstimated: true, toEstimated: deathYear === null };
 }

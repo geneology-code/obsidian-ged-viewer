@@ -34,6 +34,8 @@ export interface LifeRange {
     from: number | null;
     to: number | null;
     confidence: 'exact' | 'estimated';
+    fromEstimated?: boolean;
+    toEstimated?: boolean;
 }
 
 export interface ResearchSource {

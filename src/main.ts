@@ -26,6 +26,7 @@ import { registerInsertCommands } from './commands/insertBlocks';
 import { GEDCOMPluginSettings, DEFAULT_SETTINGS } from './types/settings';
 import { t } from './i18n';
 import { DEFAULT_RULES_YAML } from './research/heuristics';
+import { RELOAD_ICON } from './assets/reloadIcon';
 
 // Custom ribbon icon — family tree with search
 const FAMILY_SEARCH_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><g transform="translate(0,16) scale(0.1,-0.1)"><path d="M53 133 c-28 -19 -30 -43 -3 -43 22 0 27 -15 8 -23 -7 -3 3 -5 22 -5 19 0 29 2 23 5 -20 8 -15 23 7 23 28 0 25 24 -5 44 -29 19 -24 19 -52 -1z"/><path d="M7 44 c-4 -4 -7 -12 -7 -18 0 -6 5 -4 10 4 9 13 11 13 21 0 9 -12 10 -12 7 -1 -5 17 -21 25 -31 15z"/><path d="M67 44 c-10 -11 -8 -24 4 -24 5 0 7 5 4 10 -3 6 -2 10 4 10 5 0 12 -5 14 -10 3 -6 4 -5 3 2 -3 14 -20 21 -29 12z"/><path d="M127 44 c-10 -11 -8 -24 4 -24 5 0 7 5 4 10 -3 6 -2 10 4 10 5 0 12 -5 14 -10 3 -6 4 -5 3 2 -3 14 -20 21 -29 12z"/></g></svg>`;
@@ -82,8 +83,9 @@ export default class GEDCOMPlugin extends Plugin {
 			() => this.settings.reproductiveAge,
 		));
 
-		// Register custom ribbon icon
+		// Register custom ribbon icons
 		addIcon('family-search', FAMILY_SEARCH_ICON);
+		addIcon('gedcom-reload', RELOAD_ICON);
 
 		// Ribbon icons
 		this.addRibbonIcon('family-search', t('search.openView') || 'GEDCOM Search', () => {
@@ -91,6 +93,9 @@ export default class GEDCOMPlugin extends Plugin {
 		});
 		this.addRibbonIcon('telescope', t('research.openView') || 'Research Dashboard', () => {
 			this.activateResearchView();
+		});
+		this.addRibbonIcon('gedcom-reload', t('command.reloadGedcom') || 'Reload GEDCOM data', () => {
+			this.reloadGedcomData();
 		});
 
 		// Register code blocks
@@ -170,6 +175,12 @@ export default class GEDCOMPlugin extends Plugin {
 		});
 
 		// Add commands
+		this.addCommand({
+			id: 'reload-gedcom',
+			name: t('command.reloadGedcom') || 'Reload GEDCOM data',
+			callback: () => { this.reloadGedcomData(); }
+		});
+
 		this.addCommand({
 			id: 'show-all-persons',
 			name: t('modal.selectPerson') || 'Show all persons',
@@ -318,6 +329,19 @@ export default class GEDCOMPlugin extends Plugin {
 		}
 	}
 
+	async reloadGedcomData(): Promise<void> {
+		if (!this.settings.gedcomFilePath) {
+			new Notice(t('notice.noGedcomPath'));
+			return;
+		}
+		try {
+			await this.gedcomService.loadGEDCOMFile(this.settings.gedcomFilePath);
+			new Notice(t('notice.gedcomLoaded'));
+		} catch (error) {
+			new Notice(t('notice.gedcomLoadError') + (error instanceof Error ? `: ${error.message}` : ''));
+		}
+	}
+
 	private async loadGedcomDataOnReady() {
 		this.app.workspace.onLayoutReady(async () => {
 			Logger.info('Layout ready, loading GEDCOM file...');
@@ -370,7 +394,10 @@ class GEDCOMSettingTab extends PluginSettingTab {
 				.onChange(async (value) => {
 					this.plugin.settings.gedcomFilePath = value;
 					await this.plugin.saveSettings();
-				}));
+				}))
+			.addButton(btn => btn
+				.setButtonText(t('setting.reloadGedcom') || 'Reload')
+				.onClick(() => { this.plugin.reloadGedcomData(); }));
 
 		new Setting(containerEl)
 			.setName(t('setting.maxLifespanYears') || 'Maximum lifespan years')

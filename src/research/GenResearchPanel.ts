@@ -1,4 +1,4 @@
-﻿import { App, AbstractInputSuggest, TFile } from 'obsidian';
+﻿import { App, AbstractInputSuggest, Notice, TFile } from 'obsidian';
 import { GedcomService } from '../gedcom/service';
 import { GedcomEvent, GedcomIndividual } from '../gedcom/types';
 import { detectFrontierAncestors } from './frontierDetector';
@@ -38,6 +38,12 @@ const CSS = `
 .gen-research-card-row td { padding: 0; }
 .gen-research-card { padding: 10px 14px; background: var(--background-secondary); border-radius: 4px; margin: 2px 0 6px; }
 .gen-research-card-summary { margin-bottom: 8px; font-size: 0.9em; }
+.gen-research-card-summary-line { cursor: default; }
+.gen-research-card-summary-line:hover { background: var(--background-modifier-hover); border-radius: 3px; }
+.gen-research-card-id-line { font-size: 0.85em; color: var(--text-muted); cursor: default; margin-top: 2px; }
+.gen-research-card-id-line:hover { background: var(--background-modifier-hover); border-radius: 3px; }
+.gen-research-card-person-link { cursor: default; }
+.gen-research-card-person-link:hover { background: var(--background-modifier-hover); border-radius: 3px; }
 .gen-research-card-section { margin: 6px 0; font-size: 0.88em; }
 .gen-research-card-section ul { margin: 4px 0 0 16px; padding: 0; }
 .gen-research-card-section li { margin: 2px 0; }
@@ -501,7 +507,7 @@ export class GenResearchPanel {
         const row = tbody.createEl('tr', { cls: 'gen-research-row' + (isPinned ? ' gen-research-pinned' : '') });
 
         row.createEl('td', { text: fp.individual.name || fp.individual.id });
-        row.createEl('td', { text: this.formatLifeRange(fp.lifeRange) });
+        this.renderLifeRange(row.createEl('td'), fp.lifeRange);
         row.createEl('td', {
             text: fp.firstEvent
                 ? `${fp.firstEvent.type}${fp.firstEvent.date ? ' ' + fp.firstEvent.date : ''}`
@@ -544,24 +550,47 @@ export class GenResearchPanel {
         const card = cardCell.createDiv({ cls: 'gen-research-card' });
 
         const summary = card.createDiv({ cls: 'gen-research-card-summary' });
-        summary.createEl('strong', { text: fp.individual.name || fp.individual.id });
-        summary.appendText(` · ${this.formatLifeRange(fp.lifeRange)}`);
-        if (fp.firstEvent) summary.appendText(` · ${fp.firstEvent.type}${fp.firstEvent.date ? ' ' + fp.firstEvent.date : ''}`);
-        summary.appendText(` · ${fp.individual.id}`);
+
+        const summaryLine1 = summary.createDiv({ cls: 'gen-research-card-summary-line' });
+        summaryLine1.title = t('research.dblclickCopyId');
+        summaryLine1.createEl('strong', { text: fp.individual.name || fp.individual.id });
+        summaryLine1.appendText(' · ');
+        this.renderLifeRange(summaryLine1, fp.lifeRange);
+        if (fp.firstEvent) summaryLine1.appendText(` · ${fp.firstEvent.type}${fp.firstEvent.date ? ' ' + fp.firstEvent.date : ''}`);
+        summaryLine1.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            navigator.clipboard.writeText(fp.individual.id);
+            new Notice(`📋 ID: ${fp.individual.id}`);
+        });
+
 
         if (fp.spouses.length > 0) {
             const spouseDiv = card.createDiv({ cls: 'gen-research-card-section' });
             spouseDiv.createEl('strong', { text: t('research.cardSpouses') });
             const ul = spouseDiv.createEl('ul');
             for (const spouse of fp.spouses) {
-                ul.createEl('li', { text: this.formatPersonBrief(spouse) });
+                const li = ul.createEl('li', { cls: 'gen-research-card-person-link' });
+                li.appendText(this.formatPersonBrief(spouse));
+                li.title = t('research.dblclickCopyId');
+                li.addEventListener('dblclick', (e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(spouse.id);
+                    new Notice(`📋 ID: ${spouse.id}`);
+                });
             }
         }
 
         if (fp.bloodDescendant) {
             const descDiv = card.createDiv({ cls: 'gen-research-card-section' });
             descDiv.createEl('strong', { text: t('research.cardBloodDescendant') });
-            descDiv.appendText(' ' + this.formatPersonBrief(fp.bloodDescendant));
+            const descSpan = descDiv.createSpan({ cls: 'gen-research-card-person-link' });
+            descSpan.appendText(' ' + this.formatPersonBrief(fp.bloodDescendant));
+            descSpan.title = t('research.dblclickCopyId');
+            descSpan.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(fp.bloodDescendant!.id);
+                new Notice(`📋 ID: ${fp.bloodDescendant!.id}`);
+            });
         }
 
         const srcDiv = card.createDiv({ cls: 'gen-research-card-section' });
@@ -754,11 +783,23 @@ export class GenResearchPanel {
         }
     }
 
-    private formatLifeRange(lr: LifeRange): string {
-        if (lr.from === null && lr.to === null) return '—';
-        const from = lr.from !== null ? String(lr.from) : '?';
-        const to = lr.to !== null ? String(lr.to) : '?';
-        return lr.confidence === 'estimated' ? `~${from}–${to}` : `${from}–${to}`;
+    private renderLifeRange(container: HTMLElement, lr: LifeRange): void {
+        if (lr.from === null && lr.to === null) {
+            container.appendText('—');
+            return;
+        }
+        const fromStr = lr.from !== null ? String(lr.from) : '?';
+        const toStr = lr.to !== null ? String(lr.to) : '?';
+        const fromEst = lr.confidence === 'estimated' && (lr.fromEstimated ?? true) && lr.from !== null;
+        const toEst = lr.confidence === 'estimated' && (lr.toEstimated ?? true) && lr.to !== null;
+
+        if (fromEst) container.createEl('em', { text: `~${fromStr}` });
+        else container.appendText(fromStr);
+
+        container.appendText('–');
+
+        if (toEst) container.createEl('em', { text: `~${toStr}` });
+        else container.appendText(toStr);
     }
 
     private ensureStyles(): void {

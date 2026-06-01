@@ -114,6 +114,10 @@ export const ru: Record<string, string> = {
     'notice.gedJSBlocksEnabled': 'Блоки ged-js включены. Используйте только доверенный код!',
     'notice.gedJSBlocksDisabled': 'Блоки ged-js отключены.',
 
+    // Reload GEDCOM
+    'command.reloadGedcom': 'Перезагрузить данные GEDCOM',
+    'setting.reloadGedcom': 'Перезагрузить',
+
     // Commands - insert blocks
     'command.insertGedPerson': 'Вставить блок ged-person',
     'command.insertGedPersonFull': 'Вставить блок ged-person-full',
@@ -162,6 +166,7 @@ export const ru: Record<string, string> = {
     'research.pin': 'Закрепить',
     'research.unpin': 'Открепить',
     'research.cardResearchWindow': 'Период для поиска: ',
+    'research.dblclickCopyId': 'Двойной щелчок — скопировать ID',
     'research.cardSpouses': 'Супруг(и):',
     'research.cardBloodDescendant': 'Кровный потомок:',
     'research.cardSources': 'Рекомендуемые источники:',

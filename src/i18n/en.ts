@@ -114,6 +114,10 @@ export const en: Record<string, string> = {
     'notice.gedJSBlocksEnabled': 'ged-js blocks enabled. Use with trusted code only!',
     'notice.gedJSBlocksDisabled': 'ged-js blocks disabled.',
 
+    // Reload GEDCOM
+    'command.reloadGedcom': 'Reload GEDCOM data',
+    'setting.reloadGedcom': 'Reload',
+
     // Commands - insert blocks
     'command.insertGedPerson': 'Insert ged-person block',
     'command.insertGedPersonFull': 'Insert ged-person-full block',
@@ -162,6 +166,7 @@ export const en: Record<string, string> = {
     'research.pin': 'Pin',
     'research.unpin': 'Unpin',
     'research.cardResearchWindow': 'Primary research window: ',
+    'research.dblclickCopyId': 'Double-click to copy ID',
     'research.cardSpouses': 'Spouse(s):',
     'research.cardBloodDescendant': 'Blood descendant:',
     'research.cardSources': 'Suggested sources:',
