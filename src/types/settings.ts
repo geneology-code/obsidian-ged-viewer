@@ -16,12 +16,16 @@ export const DEFAULT_REPRODUCTIVE_AGE: ReproductiveAge = {
     femaleMax: 49,
 };
 
+/** maximize — widest possible range (earliest birth, latest death); minimize — tightest range (latest birth, earliest death) */
+export type LifeRangeMode = 'maximize' | 'minimize';
+
 export interface GEDCOMPluginSettings {
 	gedcomFilePath: string;
 	heuristicsFilePath: string;
 	sourceStatusEmojis: string[]; // 6 items, '' = use default
 	reproductiveAge: ReproductiveAge;
 	maxLifespanYears: number;
+	lifeRangeMode: LifeRangeMode;
 	enableDebugLogging: boolean;
 	defaultDiagramGenerations: number;
 	enableGedJS: boolean;
@@ -33,6 +37,7 @@ export const DEFAULT_SETTINGS: GEDCOMPluginSettings = {
 	sourceStatusEmojis: ['', '', '', '', '', ''],
 	reproductiveAge: { ...DEFAULT_REPRODUCTIVE_AGE },
 	maxLifespanYears: 100,
+	lifeRangeMode: 'maximize',
 	enableDebugLogging: false,
 	defaultDiagramGenerations: 3,
 	enableGedJS: false

@@ -81,6 +81,7 @@ export default class GEDCOMPlugin extends Plugin {
 			(id) => this.getDifficultyOverride(id),
 			(id, ov) => this.saveDifficultyOverride(id, ov),
 			() => this.settings.reproductiveAge,
+			() => this.settings.lifeRangeMode,
 		));
 
 		// Register custom ribbon icons
@@ -155,7 +156,8 @@ export default class GEDCOMPlugin extends Plugin {
 				(id, flags) => this.savePersonFlags(id, flags),
 				(id) => this.getDifficultyOverride(id),
 				(id, ov) => this.saveDifficultyOverride(id, ov),
-				this.settings.reproductiveAge);
+				this.settings.reproductiveAge,
+				this.settings.lifeRangeMode);
 		});
 
 		this.registerMarkdownCodeBlockProcessor('ged-heur', async (source, el, ctx) => {
@@ -163,7 +165,10 @@ export default class GEDCOMPlugin extends Plugin {
 				(id, name) => this.getSourceStatus(id, name),
 				(id, name, st) => this.saveSourceStatus(id, name, st),
 				(st) => this.getStatusEmoji(st),
-				this.settings.reproductiveAge);
+				(id) => this.getNoteLink(id),
+				(id, link) => this.saveNoteLink(id, link),
+				this.settings.reproductiveAge,
+				this.settings.lifeRangeMode);
 		});
 
 		this.registerMarkdownCodeBlockProcessor('ged-js', async (source, el, ctx) => {
@@ -513,6 +518,18 @@ class GEDCOMSettingTab extends PluginSettingTab {
 		reproDetails.createEl('h4', { text: t('setting.reproductiveAgeFemale') || 'Women' });
 		makeReproInput(reproDetails, t('setting.reproductiveAgeMin') || 'Minimum age', () => ra.femaleMin, 'femaleMin');
 		makeReproInput(reproDetails, t('setting.reproductiveAgeMax') || 'Maximum age', () => ra.femaleMax, 'femaleMax');
+
+		new Setting(containerEl)
+			.setName(t('setting.lifeRangeMode') || 'Life range estimation mode')
+			.setDesc(t('setting.lifeRangeModeDescription') || 'maximize — earliest birth / latest death; minimize — latest birth / earliest death')
+			.addDropdown(drop => drop
+				.addOption('maximize', t('setting.lifeRangeModeMaximize') || 'Maximize (widest range)')
+				.addOption('minimize', t('setting.lifeRangeModeMinimize') || 'Minimize (tightest range)')
+				.setValue(this.plugin.settings.lifeRangeMode)
+				.onChange(async (value) => {
+					this.plugin.settings.lifeRangeMode = value as import('./types/settings').LifeRangeMode;
+					await this.plugin.saveSettings();
+				}));
 
 		// Emoji customization — spoiler
 		const emojiDetails = containerEl.createEl('details');

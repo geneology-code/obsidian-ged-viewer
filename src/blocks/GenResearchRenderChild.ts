@@ -3,7 +3,7 @@ import { GedcomService } from '../gedcom/service';
 import { GedcomRenderChild } from './GedcomRenderChild';
 import { parseOverlay, serializeOverlay } from '../research/overlayParser';
 import { OverlayState, SourceStatus } from '../research/types';
-import { ReproductiveAge, DEFAULT_REPRODUCTIVE_AGE } from '../types/settings';
+import { ReproductiveAge, DEFAULT_REPRODUCTIVE_AGE, LifeRangeMode } from '../types/settings';
 import { GenResearchPanel } from '../research/GenResearchPanel';
 
 export class GenResearchRenderChild extends GedcomRenderChild {
@@ -19,6 +19,7 @@ export class GenResearchRenderChild extends GedcomRenderChild {
     private getDiffOverride: (personId: string) => import('../research/types').DifficultyCategory | undefined;
     private saveDiffOverride: (personId: string, override: import('../research/types').DifficultyCategory | undefined) => Promise<void>;
     private reproductiveAge: ReproductiveAge;
+    private lifeRangeMode: LifeRangeMode;
     private panel: GenResearchPanel | null = null;
 
     constructor(
@@ -39,6 +40,7 @@ export class GenResearchRenderChild extends GedcomRenderChild {
         getDifficultyOverride: (personId: string) => import('../research/types').DifficultyCategory | undefined,
         saveDifficultyOverride: (personId: string, override: import('../research/types').DifficultyCategory | undefined) => Promise<void>,
         reproductiveAge: ReproductiveAge = DEFAULT_REPRODUCTIVE_AGE,
+        lifeRangeMode: LifeRangeMode = 'maximize',
     ) {
         super(container, source, gedcomService, ctx, app);
         this.maxLifespanYears = maxLifespanYears;
@@ -53,6 +55,7 @@ export class GenResearchRenderChild extends GedcomRenderChild {
         this.getDiffOverride = getDifficultyOverride;
         this.saveDiffOverride = saveDifficultyOverride;
         this.reproductiveAge = reproductiveAge;
+        this.lifeRangeMode = lifeRangeMode;
     }
 
     async render(): Promise<void> {
@@ -74,6 +77,7 @@ export class GenResearchRenderChild extends GedcomRenderChild {
             getDifficultyOverride: this.getDiffOverride,
             saveDifficultyOverride: this.saveDiffOverride,
             reproductiveAge: this.reproductiveAge,
+            lifeRangeMode: this.lifeRangeMode,
             onSave: (o) => this.saveOverlay(o),
             sourcePath: this.ctx.sourcePath,
         });

@@ -3,7 +3,7 @@ import { GedcomService } from '../gedcom/service';
 import { GenResearchPanel } from '../research/GenResearchPanel';
 import { parseOverlay } from '../research/overlayParser';
 import { OverlayState, DEFAULT_UI_STATE, SourceStatus } from '../research/types';
-import { ReproductiveAge, DEFAULT_REPRODUCTIVE_AGE } from '../types/settings';
+import { ReproductiveAge, DEFAULT_REPRODUCTIVE_AGE, LifeRangeMode } from '../types/settings';
 import { t } from '../i18n';
 
 export const GEN_RESEARCH_VIEW = 'ged-research-view';
@@ -24,6 +24,7 @@ export class GenResearchView extends ItemView {
     private readonly getDifficultyOverrideFn: (personId: string) => import('../research/types').DifficultyCategory | undefined;
     private readonly saveDifficultyOverrideFn: (personId: string, override: import('../research/types').DifficultyCategory | undefined) => Promise<void>;
     private readonly reproductiveAgeFn: () => ReproductiveAge;
+    private readonly lifeRangeModeFn: () => LifeRangeMode;
     private panel: GenResearchPanel | null = null;
 
     constructor(
@@ -43,6 +44,7 @@ export class GenResearchView extends ItemView {
         getDifficultyOverride: (personId: string) => import('../research/types').DifficultyCategory | undefined,
         saveDifficultyOverride: (personId: string, override: import('../research/types').DifficultyCategory | undefined) => Promise<void>,
         reproductiveAge: () => ReproductiveAge = () => DEFAULT_REPRODUCTIVE_AGE,
+        lifeRangeMode: () => LifeRangeMode = () => 'maximize',
     ) {
         super(leaf);
         this.gedcomService = gedcomService;
@@ -60,6 +62,7 @@ export class GenResearchView extends ItemView {
         this.getDifficultyOverrideFn = getDifficultyOverride;
         this.saveDifficultyOverrideFn = saveDifficultyOverride;
         this.reproductiveAgeFn = reproductiveAge;
+        this.lifeRangeModeFn = lifeRangeMode;
     }
 
     getViewType(): string { return GEN_RESEARCH_VIEW; }
@@ -84,6 +87,7 @@ export class GenResearchView extends ItemView {
             getDifficultyOverride: this.getDifficultyOverrideFn,
             saveDifficultyOverride: this.saveDifficultyOverrideFn,
             reproductiveAge: this.reproductiveAgeFn(),
+            lifeRangeMode: this.lifeRangeModeFn(),
             onSave: async (overlay) => {
                 await this.saveOverlayFn(overlay);
             },

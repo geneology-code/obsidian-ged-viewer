@@ -6,7 +6,7 @@ import { GedcomJSRenderer } from './GedcomJSRenderer';
 import { createTopolaRenderer } from './TopolaRenderer';
 import { GenResearchRenderChild } from './GenResearchRenderChild';
 import { SourceStatus } from '../research/types';
-import { ReproductiveAge, DEFAULT_REPRODUCTIVE_AGE } from '../types/settings';
+import { ReproductiveAge, DEFAULT_REPRODUCTIVE_AGE, LifeRangeMode } from '../types/settings';
 
 type GetStatus = (personId: string, sourceName: string) => SourceStatus;
 type SetStatus = (personId: string, sourceName: string, status: SourceStatus) => Promise<void>;
@@ -194,14 +194,15 @@ export async function renderGenResearchBlock(
     getDifficultyOverride: GetDifficultyOverride,
     saveDifficultyOverride: SaveDifficultyOverride,
     reproductiveAge: ReproductiveAge = DEFAULT_REPRODUCTIVE_AGE,
+    lifeRangeMode: LifeRangeMode = 'maximize',
 ): Promise<void> {
-    const renderer = new GenResearchRenderChild(el, source, gedcomService, ctx, app, maxLifespanYears, heuristicsFilePath, getStatus, setStatus, getEmoji, getNoteLink, saveNoteLink, getPersonFlags, savePersonFlags, getDifficultyOverride, saveDifficultyOverride, reproductiveAge);
+    const renderer = new GenResearchRenderChild(el, source, gedcomService, ctx, app, maxLifespanYears, heuristicsFilePath, getStatus, setStatus, getEmoji, getNoteLink, saveNoteLink, getPersonFlags, savePersonFlags, getDifficultyOverride, saveDifficultyOverride, reproductiveAge, lifeRangeMode);
     ctx.addChild(renderer);
     await renderer.render();
 }
 
 /**
- * Render the ged-heur block — shows heuristic source suggestions for the first person ID
+ * Render the ged-heur block — shows a person card with spouses, note link, and heuristic sources
  */
 export async function renderGedHeurBlock(
     source: string,
@@ -214,9 +215,12 @@ export async function renderGedHeurBlock(
     getStatus: GetStatus,
     setStatus: SetStatus,
     getEmoji: GetEmoji,
+    getNoteLink: GetNoteLink,
+    saveNoteLink: SaveNoteLink,
     reproductiveAge: ReproductiveAge = DEFAULT_REPRODUCTIVE_AGE,
+    lifeRangeMode: LifeRangeMode = 'maximize',
 ): Promise<void> {
-    const renderer = new GedHeurRenderer(el, source, gedcomService, ctx, app, maxLifespanYears, heuristicsFilePath, getStatus, setStatus, getEmoji, reproductiveAge);
+    const renderer = new GedHeurRenderer(el, source, gedcomService, ctx, app, maxLifespanYears, heuristicsFilePath, getStatus, setStatus, getEmoji, getNoteLink, saveNoteLink, reproductiveAge, lifeRangeMode);
     ctx.addChild(renderer);
     await renderer.render();
 }

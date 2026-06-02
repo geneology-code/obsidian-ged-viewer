@@ -6,7 +6,7 @@ import { estimateLifeRange, parseYear } from './lifeRangeEstimator';
 import { matchSources, loadRules } from './heuristics';
 import { Rule } from './heuristics/types';
 import { SOURCE_STATUSES, SourceStatus } from './types';
-import { ReproductiveAge, DEFAULT_REPRODUCTIVE_AGE } from '../types/settings';
+import { ReproductiveAge, DEFAULT_REPRODUCTIVE_AGE, LifeRangeMode } from '../types/settings';
 import { estimateDifficulty } from './difficultyEstimator';
 import { serializeOverlay } from './overlayParser';
 import {
@@ -15,9 +15,9 @@ import {
 } from './types';
 import { t } from '../i18n';
 
-const STYLES_ID = 'gen-research-styles';
+export const GEN_RESEARCH_STYLES_ID = 'gen-research-styles';
 
-const CSS = `
+export const GEN_RESEARCH_CSS = `
 .gen-research-controls-wrap { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
 .gen-research-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 0.85em; }
 .gen-research-filter-label { cursor: pointer; user-select: none; }
@@ -71,7 +71,7 @@ const CSS = `
 .gen-research-root-error { color: var(--color-red, #c62828); font-size: 0.8em; }
 `;
 
-class NoteSuggest extends AbstractInputSuggest<TFile> {
+export class NoteSuggest extends AbstractInputSuggest<TFile> {
     private readonly el: HTMLInputElement;
 
     constructor(app: App, inputEl: HTMLInputElement) {
@@ -146,6 +146,7 @@ export interface GenResearchPanelOptions {
     maxLifespanYears: number;
     heuristicsFilePath: string;
     reproductiveAge?: ReproductiveAge;
+    lifeRangeMode?: LifeRangeMode;
     app: App;
     getSourceStatus: (personId: string, sourceName: string) => SourceStatus;
     setSourceStatus: (personId: string, sourceName: string, status: SourceStatus) => Promise<void>;
@@ -167,6 +168,7 @@ export class GenResearchPanel {
     private readonly maxLifespanYears: number;
     private readonly heuristicsFilePath: string;
     private readonly reproductiveAge: ReproductiveAge;
+    private readonly lifeRangeMode: LifeRangeMode;
     private readonly app: App;
     private readonly getSourceStatus: (personId: string, sourceName: string) => SourceStatus;
     private readonly setSourceStatus: (personId: string, sourceName: string, status: SourceStatus) => Promise<void>;
@@ -199,6 +201,7 @@ export class GenResearchPanel {
         this.maxLifespanYears = options.maxLifespanYears;
         this.heuristicsFilePath = options.heuristicsFilePath;
         this.reproductiveAge = options.reproductiveAge ?? DEFAULT_REPRODUCTIVE_AGE;
+        this.lifeRangeMode = options.lifeRangeMode ?? 'maximize';
         this.app = options.app;
         this.getSourceStatus = options.getSourceStatus;
         this.setSourceStatus = options.setSourceStatus;
@@ -275,7 +278,7 @@ export class GenResearchPanel {
             .filter((p): p is NonNullable<typeof p> => p != null);
 
         return frontierIndividuals.map(individual => {
-            const lifeRange = estimateLifeRange(individual, this.gedcomService, this.maxLifespanYears, this.reproductiveAge);
+            const lifeRange = estimateLifeRange(individual, this.gedcomService, this.maxLifespanYears, this.reproductiveAge, this.lifeRangeMode);
 
             const hasPlace = !!(
                 individual.birthPlace ||
@@ -593,36 +596,6 @@ export class GenResearchPanel {
             });
         }
 
-        const srcDiv = card.createDiv({ cls: 'gen-research-card-section' });
-        if (fp.sources.length > 0) {
-            srcDiv.createEl('strong', { text: t('research.cardSources') });
-            const ul = srcDiv.createEl('ul');
-            for (const src of fp.sources) {
-                const status = this.getSourceStatus(rawId, src.name);
-                const { labelKey } = SOURCE_STATUSES[status];
-                const emoji = this.getStatusEmoji(status);
-                const li = ul.createEl('li', { cls: 'gen-research-source-item' });
-                li.createSpan({ text: emoji + ' ', cls: 'gen-research-source-emoji' });
-                li.appendText(src.name);
-                li.title = t(labelKey);
-                li.style.cursor = 'pointer';
-                li.addEventListener('click', async (e) => {
-                    e.stopPropagation();
-                    await this.setSourceStatus(rawId, src.name, ((status + 1) % 6) as SourceStatus);
-                    this.rerenderCurrent();
-                });
-                li.addEventListener('contextmenu', async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    await this.setSourceStatus(rawId, src.name, ((status + 5) % 6) as SourceStatus);
-                    this.rerenderCurrent();
-                });
-            }
-        } else {
-            srcDiv.createEl('strong', { text: t('research.cardSources') + ' ' });
-            srcDiv.appendText(t('research.cardNoSources'));
-        }
-
         const flagsDiv = card.createDiv({ cls: 'gen-research-card-section' });
         flagsDiv.createEl('strong', { text: t('research.cardFlags') });
         const flagDefs: Array<{ flag: PersonFlag; label: string }> = [
@@ -673,6 +646,36 @@ export class GenResearchPanel {
             await this.saveNoteLink(rawId, next);
             this.rerenderCurrent();
         });
+
+        const srcDiv = card.createDiv({ cls: 'gen-research-card-section' });
+        if (fp.sources.length > 0) {
+            srcDiv.createEl('strong', { text: t('research.cardSources') });
+            const ul = srcDiv.createEl('ul');
+            for (const src of fp.sources) {
+                const status = this.getSourceStatus(rawId, src.name);
+                const { labelKey } = SOURCE_STATUSES[status];
+                const emoji = this.getStatusEmoji(status);
+                const li = ul.createEl('li', { cls: 'gen-research-source-item' });
+                li.createSpan({ text: emoji + ' ', cls: 'gen-research-source-emoji' });
+                li.appendText(src.name);
+                li.title = t(labelKey);
+                li.style.cursor = 'pointer';
+                li.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    await this.setSourceStatus(rawId, src.name, ((status + 1) % 6) as SourceStatus);
+                    this.rerenderCurrent();
+                });
+                li.addEventListener('contextmenu', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    await this.setSourceStatus(rawId, src.name, ((status + 5) % 6) as SourceStatus);
+                    this.rerenderCurrent();
+                });
+            }
+        } else {
+            srcDiv.createEl('strong', { text: t('research.cardSources') + ' ' });
+            srcDiv.appendText(t('research.cardNoSources'));
+        }
     }
 
     private getSpousesOf(individual: import('../gedcom/types').GedcomIndividual): import('../gedcom/types').GedcomIndividual[] {
@@ -803,10 +806,10 @@ export class GenResearchPanel {
     }
 
     private ensureStyles(): void {
-        if (!document.getElementById(STYLES_ID)) {
+        if (!document.getElementById(GEN_RESEARCH_STYLES_ID)) {
             const style = document.head.createEl('style');
-            style.id = STYLES_ID;
-            style.textContent = CSS;
+            style.id = GEN_RESEARCH_STYLES_ID;
+            style.textContent = GEN_RESEARCH_CSS;
         }
     }
 }

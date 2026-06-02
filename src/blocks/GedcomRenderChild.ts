@@ -1,6 +1,6 @@
-﻿import { MarkdownRenderChild, MarkdownPostProcessorContext, App } from 'obsidian';
+﻿import { MarkdownRenderChild, MarkdownPostProcessorContext, App, Notice } from 'obsidian';
 import { GedcomService } from '../gedcom/service';
-import { GedcomIndividual } from '../gedcom/types';
+import { GedcomIndividual, GedcomEvent } from '../gedcom/types';
 import { Logger } from '../utils/logger';
 import { t } from '../i18n';
 import {
@@ -12,9 +12,10 @@ import {
     renderPersonFull
 } from './renderers';
 import { loadRules, matchSources } from '../research/heuristics';
-import { estimateLifeRange } from '../research/lifeRangeEstimator';
-import { SOURCE_STATUSES, SourceStatus } from '../research/types';
-import { ReproductiveAge, DEFAULT_REPRODUCTIVE_AGE } from '../types/settings';
+import { estimateLifeRange, parseYear } from '../research/lifeRangeEstimator';
+import { SOURCE_STATUSES, SourceStatus, LifeRange } from '../research/types';
+import { ReproductiveAge, DEFAULT_REPRODUCTIVE_AGE, LifeRangeMode } from '../types/settings';
+import { NoteSuggest, GEN_RESEARCH_STYLES_ID, GEN_RESEARCH_CSS } from '../research/GenResearchPanel';
 
 /**
  * Base class for GEDCOM renderers with proper lifecycle management
@@ -227,15 +228,18 @@ export class GedcomPersonEventsRenderer extends GedcomRenderChild {
 
 /**
  * Renderer for ged-heur blocks
- * Shows heuristic source suggestions for the first person ID found in the block.
+ * Shows a person card with spouses, note link, and heuristic source suggestions.
  */
 export class GedHeurRenderer extends GedcomRenderChild {
     private readonly maxLifespanYears: number;
     private readonly heuristicsFilePath: string;
     private readonly reproductiveAge: ReproductiveAge;
+    private readonly lifeRangeMode: LifeRangeMode;
     private readonly getSourceStatus: (personId: string, sourceName: string) => SourceStatus;
     private readonly setSourceStatus: (personId: string, sourceName: string, status: SourceStatus) => Promise<void>;
     private readonly getStatusEmoji: (status: SourceStatus) => string;
+    private readonly getNoteLink: (personId: string) => string;
+    private readonly saveNoteLink: (personId: string, link: string) => Promise<void>;
 
     constructor(
         container: HTMLElement,
@@ -248,25 +252,29 @@ export class GedHeurRenderer extends GedcomRenderChild {
         getStatus: (personId: string, sourceName: string) => SourceStatus,
         setStatus: (personId: string, sourceName: string, status: SourceStatus) => Promise<void>,
         getEmoji: (status: SourceStatus) => string,
+        getNoteLink: (personId: string) => string,
+        saveNoteLink: (personId: string, link: string) => Promise<void>,
         reproductiveAge: ReproductiveAge = DEFAULT_REPRODUCTIVE_AGE,
+        lifeRangeMode: LifeRangeMode = 'maximize',
     ) {
         super(container, source, gedcomService, ctx, app);
         this.maxLifespanYears = maxLifespanYears;
         this.heuristicsFilePath = heuristicsFilePath;
         this.reproductiveAge = reproductiveAge;
+        this.lifeRangeMode = lifeRangeMode;
         this.getSourceStatus = getStatus;
         this.setSourceStatus = setStatus;
         this.getStatusEmoji = getEmoji;
+        this.getNoteLink = getNoteLink;
+        this.saveNoteLink = saveNoteLink;
     }
 
     async render(): Promise<void> {
-        // Resolve all async data BEFORE touching the DOM to avoid double-render race.
-        // (onload() and the explicit render() call in the block function run concurrently;
-        // whichever finishes last wins cleanly because empty() is called right before write.)
+        // Resolve async data before touching the DOM to avoid double-render race
         const token = this.source.trim().split(/\s+/).find(s => s.length > 0);
         const individual = token ? this.gedcomService.getIndividual(token) : null;
         const rules = this.heuristicsFilePath ? await loadRules(this.app, this.heuristicsFilePath) : [];
-        const lifeRange = individual ? estimateLifeRange(individual, this.gedcomService, this.maxLifespanYears, this.reproductiveAge) : null;
+        const lifeRange = individual ? estimateLifeRange(individual, this.gedcomService, this.maxLifespanYears, this.reproductiveAge, this.lifeRangeMode) : null;
         const sources = individual && lifeRange ? matchSources(individual, lifeRange, rules, this.gedcomService) : [];
 
         this.containerEl.empty();
@@ -284,20 +292,96 @@ export class GedHeurRenderer extends GedcomRenderChild {
             return;
         }
 
-        const rawId = individual.id.replace(/@/g, '');
-        const wrap = this.containerEl.createDiv({ cls: 'ged-heur' });
-        wrap.createEl('strong', { text: `${individual.name} — ${t('heur.title')}` });
+        if (!document.getElementById(GEN_RESEARCH_STYLES_ID)) {
+            const style = document.head.createEl('style');
+            style.id = GEN_RESEARCH_STYLES_ID;
+            style.textContent = GEN_RESEARCH_CSS;
+        }
 
-        if (sources.length === 0) {
-            wrap.createEl('p', { text: t('heur.noSources'), cls: 'ged-heur-empty' });
-        } else {
-            const ul = wrap.createEl('ul', { cls: 'ged-heur-list' });
+        const rawId = individual.id.replace(/@/g, '');
+        const card = this.containerEl.createDiv({ cls: 'gen-research-card' });
+
+        // Summary line with dblclick-to-copy ID
+        const summaryLine = card.createDiv({ cls: 'gen-research-card-summary-line' });
+        summaryLine.title = t('research.dblclickCopyId');
+        summaryLine.createEl('strong', { text: individual.name || individual.id });
+        if (lifeRange && (lifeRange.from !== null || lifeRange.to !== null)) {
+            summaryLine.appendText(' · ');
+            this.renderLifeRangeInto(summaryLine, lifeRange);
+        }
+        const allDatedEvents: GedcomEvent[] = [];
+        if (individual.birthDate) allDatedEvents.push({ type: 'BIRT', date: individual.birthDate, place: individual.birthPlace });
+        if (individual.deathDate) allDatedEvents.push({ type: 'DEAT', date: individual.deathDate, place: individual.deathPlace });
+        for (const ev of individual.events || []) {
+            if (ev.date) allDatedEvents.push(ev);
+        }
+        const firstEvent = allDatedEvents.length > 0
+            ? allDatedEvents.reduce((earliest, ev) =>
+                (parseYear(ev.date) ?? Infinity) < (parseYear(earliest.date) ?? Infinity) ? ev : earliest)
+            : null;
+        if (firstEvent) summaryLine.appendText(` · ${firstEvent.type}${firstEvent.date ? ' ' + firstEvent.date : ''}`);
+        summaryLine.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            navigator.clipboard.writeText(individual.id);
+            new Notice(`📋 ID: ${individual.id}`);
+        });
+
+        // Spouses
+        const spouses = this.getSpousesOf(individual);
+        if (spouses.length > 0) {
+            const spouseDiv = card.createDiv({ cls: 'gen-research-card-section' });
+            spouseDiv.createEl('strong', { text: t('research.cardSpouses') });
+            const ul = spouseDiv.createEl('ul');
+            for (const spouse of spouses) {
+                const li = ul.createEl('li', { cls: 'gen-research-card-person-link' });
+                li.appendText(this.formatPersonBrief(spouse));
+                li.title = t('research.dblclickCopyId');
+                li.addEventListener('dblclick', (e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(spouse.id);
+                    new Notice(`📋 ID: ${spouse.id}`);
+                });
+            }
+        }
+
+        // Note link
+        const noteLinkDiv = card.createDiv({ cls: 'gen-research-card-section' });
+        noteLinkDiv.createEl('strong', { text: t('research.cardNoteLink') });
+        const noteRow = noteLinkDiv.createDiv({ cls: 'gen-research-note-row' });
+        const noteInput = noteRow.createEl('input', { cls: 'gen-research-note-input' });
+        noteInput.type = 'text';
+        noteInput.value = this.getNoteLink(rawId);
+        noteInput.placeholder = t('research.cardNoteLinkPlaceholder');
+        new NoteSuggest(this.app, noteInput);
+        const openBtn = noteRow.createEl('button', {
+            cls: 'gen-research-note-open',
+            text: t('research.cardOpenNote'),
+            attr: { title: t('research.cardOpenNote') }
+        });
+        openBtn.disabled = !noteInput.value.trim();
+        noteInput.addEventListener('input', () => { openBtn.disabled = !noteInput.value.trim(); });
+        openBtn.addEventListener('click', () => {
+            const path = noteInput.value.trim();
+            if (path) this.app.workspace.openLinkText(path, this.ctx.sourcePath);
+        });
+        noteInput.addEventListener('blur', async () => {
+            const current = this.getNoteLink(rawId);
+            const next = noteInput.value.trim();
+            if (next === current) return;
+            await this.saveNoteLink(rawId, next);
+        });
+
+        // Sources (at bottom)
+        const srcDiv = card.createDiv({ cls: 'gen-research-card-section' });
+        if (sources.length > 0) {
+            srcDiv.createEl('strong', { text: t('research.cardSources') });
+            const ul = srcDiv.createEl('ul');
             for (const src of sources) {
                 const status = this.getSourceStatus(rawId, src.name);
                 const { labelKey } = SOURCE_STATUSES[status];
                 const emoji = this.getStatusEmoji(status);
-                const li = ul.createEl('li', { cls: 'ged-heur-item' });
-                li.createSpan({ text: emoji + ' ', cls: 'ged-heur-emoji' });
+                const li = ul.createEl('li', { cls: 'gen-research-source-item' });
+                li.createSpan({ text: emoji + ' ', cls: 'gen-research-source-emoji' });
                 li.appendText(src.name);
                 li.title = t(labelKey);
                 li.style.cursor = 'pointer';
@@ -313,7 +397,45 @@ export class GedHeurRenderer extends GedcomRenderChild {
                     await this.render();
                 });
             }
+        } else {
+            srcDiv.createEl('strong', { text: t('research.cardSources') + ' ' });
+            srcDiv.appendText(t('research.cardNoSources'));
         }
+    }
+
+    private getSpousesOf(individual: GedcomIndividual): GedcomIndividual[] {
+        const spouses: GedcomIndividual[] = [];
+        for (const familyId of individual.familiesAsSpouse || []) {
+            const family = this.gedcomService.getFamily(familyId);
+            if (!family) continue;
+            const otherSpouseId = family.husbandId === individual.id ? family.wifeId : family.husbandId;
+            if (otherSpouseId) {
+                const spouse = this.gedcomService.getIndividual(otherSpouseId);
+                if (spouse) spouses.push(spouse);
+            }
+        }
+        return spouses;
+    }
+
+    private formatPersonBrief(individual: GedcomIndividual): string {
+        const name = individual.name || individual.id;
+        const from = parseYear(individual.birthDate);
+        const to = parseYear(individual.deathDate);
+        if (from === null && to === null) return name;
+        return `${name} (${from ?? '?'}–${to ?? '?'})`;
+    }
+
+    private renderLifeRangeInto(container: HTMLElement, lr: LifeRange): void {
+        if (lr.from === null && lr.to === null) { container.appendText('—'); return; }
+        const fromStr = lr.from !== null ? String(lr.from) : '?';
+        const toStr = lr.to !== null ? String(lr.to) : '?';
+        const fromEst = lr.confidence === 'estimated' && (lr.fromEstimated ?? true) && lr.from !== null;
+        const toEst = lr.confidence === 'estimated' && (lr.toEstimated ?? true) && lr.to !== null;
+        if (fromEst) container.createEl('em', { text: `~${fromStr}` });
+        else container.appendText(fromStr);
+        container.appendText('–');
+        if (toEst) container.createEl('em', { text: `~${toStr}` });
+        else container.appendText(toStr);
     }
 }
 

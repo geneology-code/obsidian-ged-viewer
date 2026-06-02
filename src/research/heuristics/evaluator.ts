@@ -18,11 +18,7 @@ function parseRegexCondition(pattern: string): RegExp {
 }
 
 function allEventPlaces(ctx: EvalContext): string[] {
-    return [
-        ctx.person.birthPlace,
-        ctx.person.deathPlace,
-        ...(ctx.person.events ?? []).map(e => e.place),
-    ].filter((p): p is string => !!p);
+    return ctx.allEventPlacesList;
 }
 
 // Returns [yearFrom, yearTo] using read-gedcom's full GEDCOM date parser.
@@ -173,7 +169,7 @@ export function buildContext(
     lifeRange: import('../types').LifeRange,
     service?: import('../../gedcom/service').GedcomService,
 ): EvalContext {
-    const ownPlaceSources = [
+    const ownPlacesList = [
         person.birthPlace,
         person.deathPlace,
         ...(person.events ?? []).map(e => e.place),
@@ -204,8 +200,8 @@ export function buildContext(
         } catch { /* no family data */ }
     }
 
-    const allPlaceSources = [...ownPlaceSources, ...childBirthPlaces];
-    const allPlaces = allPlaceSources.join(' ').toLowerCase();
+    const allEventPlacesList = [...ownPlacesList, ...childBirthPlaces];
+    const allPlaces = allEventPlacesList.join(' ').toLowerCase();
 
-    return { person, lifeRange, allPlaces, allOccupations, allTitles, datedEvents };
+    return { person, lifeRange, allPlaces, allEventPlacesList, allOccupations, allTitles, datedEvents };
 }

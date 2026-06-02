@@ -1,7 +1,6 @@
 # GEDCOM Genealogy Plugin — Showcase
 
 > An Obsidian plugin for displaying genealogical data from **GEDCOM files** directly in your vault. Load a `.ged` file — and get person cards, comparison tables, interactive ancestor/descendant diagrams, timelines, and even the ability to write custom JavaScript to access the data.
-
 ## Plugin Overview
 
 ### Features
@@ -63,7 +62,7 @@ ancestors/romanov/royal92.ged    — nested structure
 
 > **Important:** the file must be inside the vault (Obsidian folder), not outside. The plugin reads the file via the Obsidian Vault API.
 
-**Restart Obsidian** after changing the path.
+Next to the path input there is a **Reload** button — reloads the GEDCOM file without restarting Obsidian. The same action is available via the ribbon icon and the "Reload GEDCOM data" command.
 
 ---
 
@@ -206,6 +205,10 @@ For families: `ged-chronos` (via `gcf: @F@`).
 ## Plugin Commands
 
 All commands are invoked via **Ctrl+P** (or **Cmd+P** on Mac) → type the command name.
+
+### "Reload GEDCOM data"
+
+Reloads the `.ged` file from disk without restarting Obsidian. Useful after editing the file in an external program. Also available as a **ribbon icon** (reload icon in the left panel).
 
 ### "Select a Person"
 
@@ -434,7 +437,6 @@ LVL:5
 #### Alexander III's descendants
 
 With `LVL:1` parameter
-
 ```ged-diagram-descendants
 LVL:1
 @I40@
@@ -763,6 +765,11 @@ ged.paragraph(`\nTotal children: ${rows.length}`);
 #### Minimal — show all frontier ancestors
 
 ```ged-research
+[ui]
+sort=lifeRange:asc
+root=I37
+hide_ignored=false
+expanded=I1544
 ```
 
 ---
@@ -810,12 +817,14 @@ ged.paragraph(`\nTotal children: ${rows.length}`);
 ### Expandable Research Card
 
 Clicking a row opens a panel showing:
-- Person summary (name, life range, first event, ID)
-- **Spouse(s)** (name, life years)
-- **Blood descendant** — direct child linking this person to the ROOT
-- Suggested historical sources with clickable status badges (LMB / RMB to cycle)
+- Person summary (name, life range, first event) — **double-click to copy person ID** (shown as `📋 ID: @I123@` notice)
+- **Spouse(s)** — double-click to copy their ID
+- **Blood descendant** — direct child linking this person to the ROOT — double-click to copy their ID
 - Flags: **Pinned**, **Ignored**
 - Research note link (with vault autocomplete)
+- Suggested historical sources with clickable status badges (LMB / RMB to cycle)
+
+**Life range display:** calculated (estimated) dates are shown in *italic* with a `~` prefix — e.g. `1850–`*`~1950`* means birth is exact, death is estimated. Both parts can be estimated independently.
 
 ### Persistent State
 
@@ -848,7 +857,7 @@ Available keys:
 
 ### ged-heur
 
-> Displays **heuristic source suggestions** for a single person. Evaluates all configured YAML rules against that person's place, dates, and sex — and shows a list of relevant sources with clickable research statuses.
+> Displays a **person card** with heuristic source suggestions. Shows: name and life range, spouses, research note link, and a list of relevant sources matched by YAML rules — all with clickable research statuses.
 
 > ⚠️ **Note:** requires a heuristics rules file configured in *Settings → Heuristics & Research*.
 

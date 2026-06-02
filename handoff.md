@@ -42,7 +42,7 @@ src/
 │   ├── types.ts                     — UIState, OverlayState, FrontierPerson, SourceStatus и др.
 │   ├── overlayParser.ts             — parse/serialize состояния блока ged-research
 │   ├── frontierDetector.ts          — BFS по предкам от корня, возвращает FrontierPerson[]
-│   ├── lifeRangeEstimator.ts        — оценка периода жизни (constraint-based)
+│   ├── lifeRangeEstimator.ts        — оценка периода жизни (constraint-based, браки, режим maximize/minimize)
 │   ├── difficultyEstimator.ts       — подсчёт сложности (score → green/yellow/red)
 │   └── heuristics/                  — YAML-движок правил подбора источников
 │       ├── types.ts                 — Condition, Rule, RulesFile, EvalContext
@@ -138,7 +138,9 @@ src/
 - `allOccupations` — все OCCU joined, lowercased
 - `allTitles` — все TITL joined, lowercased
 - `datedEvents: DatedEvent[]` — события с обоими полями (дата + место); `yearFrom`/`yearTo` из `read-gedcom.parseDate()` (правильно обрабатывает периоды "FROM 1850 TO 1917")
-- `allPlaces` и `datedEvents` включают **рождения детей** персоны (через `getFamilyMembers`): место рождения ребёнка считается событием родителя. Это значит `place_includes`, `alive_at_in_range`, `has_dates` и все остальные условия автоматически работают по детям.
+- `allPlaces` — все места joined, lowercased (включая места рождения детей)
+- `allEventPlacesList: string[]` — все места в оригинальном регистре (включая места рождения детей); используется условиями `place_regex`, `birth_place_regex`, `death_place_regex`
+- `allPlaces`, `allEventPlacesList` и `datedEvents` включают **рождения детей** персоны (через `getFamilyMembers`): место рождения ребёнка считается событием родителя. Это значит `place_includes`, `place_regex`, `alive_at_in_range` и все остальные условия автоматически работают по детям.
 
 **Новые условия (`src/research/heuristics/evaluator.ts`):**
 - `occu_include` / `has_occu` — по полю OCCU, case-insensitive
@@ -320,6 +322,7 @@ interface GEDCOMPluginSettings {
     sourceStatusEmojis: string[];     // [6] кастомные эмодзи, '' = дефолт
     reproductiveAge: ReproductiveAge; // { maleMin, maleMax, femaleMin, femaleMax }
     maxLifespanYears: number;         // default 100
+    lifeRangeMode: LifeRangeMode;     // 'maximize' | 'minimize', default 'maximize'
     enableDebugLogging: boolean;
     defaultDiagramGenerations: number; // default 3
     enableGedJS: boolean;
@@ -327,6 +330,10 @@ interface GEDCOMPluginSettings {
 
 // Репродуктивный возраст по умолчанию:
 // maleMin: 15, maleMax: 60, femaleMin: 15, femaleMax: 49
+
+// LifeRangeMode:
+// maximize — расширить диапазон до максимума (ранняя дата рождения, поздняя смерть)
+// minimize — сузить до минимума (позднее рождение, ранняя смерть)
 ```
 
 ---
@@ -390,6 +397,47 @@ Obsidian переопределяет шрифт topola через `.topola-svg 
 - 93 правила (рекурсивно)
 - `showcase-obsidian/rules.yaml` синхронизирован с шаблоном
 
+### После v1.2.0 — Режим расчёта периода жизни, браки, фикс place_regex
+
+**Новая настройка `lifeRangeMode: LifeRangeMode` (`'maximize' | 'minimize'`, default `'maximize'`):**
+
+- `maximize` — наибольший возможный диапазон: самое раннее рождение, самая поздняя смерть. Используется чтобы не пропустить источники при построении эвристик.
+- `minimize` — наименьший возможный диапазон: позднее рождение, ранняя смерть. Консервативная оценка — только то, что подкреплено данными.
+
+Влияет на все три ветки `estimateLifeRange`:
+- Ветка 1 (BIRT+DEAT точные) — mode игнорируется
+- Ветка 2 (только BIRT): `maximize` → `to = birthYear + maxLifespan`; `minimize` → `to = birthYear` (нет данных для экстраполяции)
+- Ветка 3 (constraint-based): `maximize` → `from = birthLower`, `to = birthUpper + maxLifespan`; `minimize` → `from = birthUpper`, `to = lastKnownAlive ?? birthUpper`
+
+Настройка отображается в разделе **Heuristics & Research** после блока «Estimated reproductive age».
+
+Подробный разбор алгоритма со всеми случаями и псевдокодом — `estimated_lifetime.md`.
+
+**Браки как ограничения в `lifeRangeEstimator.ts` (ветка 3):**
+- Перебираются все `person.familiesAsSpouse`, читаются `marriageDate`
+- `firstMarriage - minRepro` → дополнительный `birthUpper` (персона родилась не позже чем за minRepro лет до первого брака)
+- `lastMarriage` → дополнительный `lastKnownAlive` (персона была жива в момент последнего брака)
+
+**Фикс `place_regex` в эвристиках (`src/research/heuristics/`):**
+
+Добавлено поле `allEventPlacesList: string[]` в `EvalContext` — список мест в оригинальном регистре, включает места рождения детей персоны. До этого `place_regex` проверял только собственные события персоны, игнорируя детей (в отличие от `place_includes`, который включал детей через `allPlaces`).
+
+Изменения:
+- `EvalContext.allEventPlacesList: string[]` — добавлено в `src/research/heuristics/types.ts`
+- `allEventPlaces(ctx)` в `evaluator.ts` теперь возвращает `ctx.allEventPlacesList` вместо inline-массива
+- `buildContext()` в `evaluator.ts` — строит `allEventPlacesList = [...ownPlaces, ...childBirthPlaces]`
+
+Теперь `place_includes`, `alive_at_in_range` и `place_regex` одинаково учитывают места рождения детей.
+
+**Пробрасывание `lifeRangeMode` по всему стеку:**
+- `estimateLifeRange(person, service, maxLifespan, reproductiveAge, mode)` — новый 5-й параметр
+- `GenResearchPanelOptions.lifeRangeMode?: LifeRangeMode` → `GenResearchPanel`
+- `GedHeurRenderer` конструктор — новый параметр `lifeRangeMode`
+- `GenResearchRenderChild` конструктор — новый параметр `lifeRangeMode`
+- `GenResearchView` конструктор — новый параметр `lifeRangeMode: () => LifeRangeMode`
+- `renderGenResearchBlock()`, `renderGedHeurBlock()` в `blocks/index.ts` — новый параметр
+- `main.ts` передаёт `this.settings.lifeRangeMode` во все точки регистрации
+
 ---
 
 ## Релиз
@@ -406,6 +454,33 @@ git push && git push --tags
 git tag -d vX.Y.Z
 git push origin --delete vX.Y.Z
 ```
+
+### UI: Карточка ged-research — источники внизу; ged-heur — полная карточка
+
+**Карточка персоны в `ged-research` — новый порядок секций:**
+1. Имя · период жизни · первое событие
+2. Супруги
+3. Кровный потомок
+4. Флаги (Закреплён / Игнорировать)
+5. Ссылка на заметку-расследование
+6. **Рекомендуемые источники** — перемещены в конец
+
+**`ged-heur` — теперь полноценная карточка (`src/blocks/GedcomRenderChild.ts`):**
+
+Было: простой список `<ul>` с заголовком.  
+Стало: карточка `.gen-research-card` с теми же секциями что в `ged-research`, кроме флагов:
+1. Имя · период жизни · первое событие (двойной клик → копирует ID персоны)
+2. Супруги (двойной клик → копирует ID)
+3. Ссылка на заметку-расследование (с автодополнением по vault)
+4. Рекомендуемые источники (кликабельные статусы, внизу)
+
+Флаги «Закреплён» / «Игнорировать» — отсутствуют в ged-heur намеренно.
+
+**Архитектурные изменения:**
+- `GEN_RESEARCH_STYLES_ID`, `GEN_RESEARCH_CSS`, `NoteSuggest` — теперь экспортируются из `GenResearchPanel.ts`
+- `GedHeurRenderer` — новые параметры `getNoteLink` / `saveNoteLink`, проброшены через `renderGedHeurBlock()` в `index.ts` и регистрацию в `main.ts`
+- Вспомогательные методы `getSpousesOf`, `formatPersonBrief`, `renderLifeRangeInto` — добавлены прямо в `GedHeurRenderer` (намеренное дублирование, чтобы не создавать лишних зависимостей)
+- Статус источников и ссылка на заметку разделяются с `ged-research` через общий `data.json`
 
 ---
 
