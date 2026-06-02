@@ -4,7 +4,7 @@
 
 Obsidian-плагин для работы с `.ged` (GEDCOM) файлами генеалогии. Показывает данные о персонах, семьях, событиях, строит диаграммы и хронологии прямо в заметках Obsidian через code-блоки.
 
-**Версия:** 1.2.0  
+**Версия:** 1.2.2  
 **Сборка:** `npm run build` → `main.js`  
 **Деплой в тест-vault:**
 ```bash
@@ -481,6 +481,26 @@ git push origin --delete vX.Y.Z
 - `GedHeurRenderer` — новые параметры `getNoteLink` / `saveNoteLink`, проброшены через `renderGedHeurBlock()` в `index.ts` и регистрацию в `main.ts`
 - Вспомогательные методы `getSpousesOf`, `formatPersonBrief`, `renderLifeRangeInto` — добавлены прямо в `GedHeurRenderer` (намеренное дублирование, чтобы не создавать лишних зависимостей)
 - Статус источников и ссылка на заметку разделяются с `ged-research` через общий `data.json`
+
+### v1.2.2 — Фикс ширины карточек в диаграммах Topola
+
+**Баг:** все карточки в диаграммах (`ged-diagram-*`) имели фиксированную ширину 64px вне зависимости от длины текста. Имена вроде «Catherine_II the_Great» обрезались.
+
+**Причина:** Topola's `getLength()` вызывает `d3.select('svg')` — берёт **первый** SVG на странице. В Obsidian первым оказывается иконка интерфейса (`display:none` или нулевых размеров) → `getComputedTextLength()` возвращает 0 → все карточки получают минимальную ширину `MIN_WIDTH = 64`.
+
+**Решение** — esbuild-плагин `patchTopolaPlugin` в `esbuild.config.mjs`:
+```js
+source.replace(
+    `(0, d3_selection_1.select)('svg')`,
+    `(0, d3_selection_1.select)(document.querySelector('.topola-svg') || 'svg')`
+)
+```
+Патчит один вызов в `node_modules/topola/dist/detailed-renderer.js` **при сборке**, без правки node_modules. Работает и локально, и в CI.
+
+**Дополнительно:**
+- Убран `ensureFontLoaded()` — ожидал `document.fonts.ready` (сотни мс на первый рендер). Montserrat в Obsidian не используется (переопределяется `--font-interface`); шрифты уже загружены к моменту рендера диаграммы.
+- Убраны debug `console.log` из `_fitToView` и `_focusOnRoot`.
+- Очищены вручную правленные `node_modules/topola` → переустановлен чистый `topola@3.9.0`.
 
 ---
 

@@ -336,7 +336,7 @@ export class TopolaDiagramRenderer extends MarkdownRenderChild {
     // when multiple diagrams render on the same page
     private static _rawIndiCache = new Map<string, any>();
     private static _rawFamCache = new Map<string, any>();
-    private static _fontLoaded = false; // Track font loading status
+    private static _fontLoaded = false; // unused, kept for compat
     private static _instanceCounter = 0;
 
     private app!: App;
@@ -675,9 +675,6 @@ export class TopolaDiagramRenderer extends MarkdownRenderChild {
         try {
             const selector = `[data-topola-id="${this.uniqueId}"] .topola-svg`;
 
-            // Ensure Montserrat font is loaded only once
-            await TopolaDiagramRenderer.ensureFontLoaded();
-
             // Validate jsonData before passing to Topola
             if (!jsonData.indis || jsonData.indis.length === 0) {
                 throw new Error('No individuals data available for chart');
@@ -785,20 +782,6 @@ export class TopolaDiagramRenderer extends MarkdownRenderChild {
         };
     }
 
-    /**
-     * Ensure Montserrat font is loaded only once across all renders.
-     */
-    private static async ensureFontLoaded(): Promise<void> {
-        if (TopolaDiagramRenderer._fontLoaded) return;
-        try {
-            await document.fonts.load('12px Montserrat');
-            await document.fonts.ready;
-            TopolaDiagramRenderer._fontLoaded = true;
-        } catch (e) {
-            console.warn('[Topola] Failed to load Montserrat font:', e);
-            TopolaDiagramRenderer._fontLoaded = true; // Mark as loaded to avoid retrying
-        }
-    }
 
     /**
      * Determine sex from individual data.
@@ -1089,14 +1072,6 @@ export class TopolaDiagramRenderer extends MarkdownRenderChild {
         const translateX = (wrapperWidth - diagramWidth * this.fitScale) / 2;
         const translateY = (containerHeight - diagramHeight * this.fitScale) / 2;
 
-        console.log('[Topola] _fitToView debug:');
-        console.log('[Topola] containerEl clientHeight:', containerHeight);
-        console.log('[Topola] wrapperEl clientWidth:', wrapperWidth, 'getBoundingClientRect height:', wrapperHeight);
-        console.log('[Topola] diagram size:', diagramWidth, 'x', diagramHeight);
-        console.log('[Topola] fitScale:', this.fitScale);
-        console.log('[Topola] scaled diagram:', diagramWidth * this.fitScale, 'x', diagramHeight * this.fitScale);
-        console.log('[Topola] translateX:', translateX, 'translateY:', translateY);
-
         const fitTransform = zoomIdentity
             .translate(translateX, translateY)
             .scale(this.fitScale);
@@ -1111,55 +1086,30 @@ export class TopolaDiagramRenderer extends MarkdownRenderChild {
      * Focus on the root individual (center on them).
      */
     private _focusOnRoot(): void {
-        console.log('[Topola] _focusOnRoot called, rootIndividualId:', this.rootIndividualId);
-        console.log('[Topola] chartInfo:', this.chartInfo);
-
-        if (!this.zoomBehavior || !this.chartWrapper || !this.svgElement || !this.chartInfo) {
-            console.warn('[Topola] Missing required objects');
-            return;
-        }
+        if (!this.zoomBehavior || !this.chartWrapper || !this.svgElement || !this.chartInfo) return;
 
         const wrapperEl = this.chartWrapper.querySelector('.topola-chart-wrapper');
-        if (!wrapperEl) {
-            console.warn('[Topola] Cannot find .topola-chart-wrapper');
-            return;
-        }
+        if (!wrapperEl) return;
 
-        // Find root individual via clipPath id="clip-I44" → parent g.indi
         let relCenterX: number | null = null;
         let relCenterY: number | null = null;
 
-        const clipPathSelector = `clipPath[id="clip-${this.rootIndividualId}"]`;
-        console.log('[Topola] Searching for clipPath:', clipPathSelector);
-
-        const clipPath = this.svgElement.querySelector(clipPathSelector);
-        console.log('[Topola] clipPath found:', clipPath);
-
+        const clipPath = this.svgElement.querySelector(`clipPath[id="clip-${this.rootIndividualId}"]`);
         if (clipPath) {
             const parentIndi = clipPath.closest('g.indi');
-            console.log('[Topola] parentIndi:', parentIndi);
-
             if (parentIndi) {
-                // Parse transform to get position relative to root group
                 const transform = parentIndi.getAttribute('transform');
-                console.log('[Topola] transform attribute:', transform);
-
                 if (transform) {
                     const match = transform.match(/translate\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/);
                     if (match) {
                         const tx = parseFloat(match[1]);
                         const ty = parseFloat(match[2]);
-                        console.log('[Topola] tx:', tx, 'ty:', ty);
-
-                        // Get card dimensions from background rect
                         const bgRect = parentIndi.querySelector('rect.background');
                         if (bgRect) {
                             const width = parseFloat(bgRect.getAttribute('width') || '100');
                             const height = parseFloat(bgRect.getAttribute('height') || '60');
                             relCenterX = tx + width / 2;
                             relCenterY = ty + height / 2;
-                            console.log('[Topola] card width:', width, 'height:', height);
-                            console.log('[Topola] relCenterX:', relCenterX, 'relCenterY:', relCenterY);
                         }
                     }
                 }
@@ -1167,41 +1117,25 @@ export class TopolaDiagramRenderer extends MarkdownRenderChild {
         }
 
         if (relCenterX === null || relCenterY === null) {
-            console.warn('[Topola] Using fallback center');
-            // Fallback: center of the chart
             relCenterX = this.chartInfo.size[0] / 2;
             relCenterY = this.chartInfo.size[1] / 2;
         }
 
         // Topola applies origin to the root <g> group: translate(origin[0], origin[1])
         // g.indi coordinates are RELATIVE to this origin
-        // Real position in SVG coordinates = origin + relative position
         const realCenterX = this.chartInfo.origin[0] + relCenterX;
         const realCenterY = this.chartInfo.origin[1] + relCenterY;
 
-        console.log('[Topola] origin:', this.chartInfo.origin);
-        console.log('[Topola] realCenterX:', realCenterX, 'realCenterY:', realCenterY);
-
         const wrapperWidth = wrapperEl.clientWidth;
         const containerHeight = this.containerEl.clientHeight;
-
-        // Calculate scale - use a comfortable zoom level (1.5x fit scale or 1.0)
         const focusScale = Math.max(this.fitScale * 1.5, 0.8);
 
-        console.log('[Topola] wrapperWidth:', wrapperWidth, 'containerHeight:', containerHeight);
-        console.log('[Topola] fitScale:', this.fitScale, 'focusScale:', focusScale);
-
-        // Center the viewport on root individual position at the given scale
         const translateX = wrapperWidth / 2 - realCenterX * focusScale;
         const translateY = containerHeight / 2 - realCenterY * focusScale;
-
-        console.log('[Topola] translateX:', translateX, 'translateY:', translateY);
 
         const focusTransform = zoomIdentity
             .translate(translateX, translateY)
             .scale(focusScale);
-
-        console.log('[Topola] focusTransform:', focusTransform);
 
         select(wrapperEl as HTMLElement)
             .transition()
